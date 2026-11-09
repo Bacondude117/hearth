@@ -1072,22 +1072,45 @@ impl ServerManager {
 
     /// Points the mod at the voice tunnel's public address (or clears it when not shared), so
     /// players' clients connect to the right place.
+    /// Points the mod at the voice tunnel's public address (or clears it when not shared), so
+    /// players' clients connect to the right place. Logs what players will connect to.
     async fn sync_voice_host(&self, inst: &Instance) {
         let Some(v) = &inst.voice else { return };
-        let host = if self.playit.is_linked() {
+        let linked = self.playit.is_linked();
+        let lookup = if linked {
             self.playit
                 .tunnel_for_port(v.port, "udp")
                 .await
-                .ok()
-                .flatten()
-                .map(|t| t.address)
+                .map(|t| t.map(|t| t.address))
+                .map_err(|e| tracing::warn!("voice tunnel lookup failed: {e}"))
         } else {
-            None
+            Ok(None)
         };
-        if let Err(e) =
-            mc_voicechat::write_config(&self.paths.server_dir(&inst.id), &inst.flavor, v.port, host.as_deref())
-        {
+        let dir = self.paths.server_dir(&inst.id);
+        let before = mc_voicechat::read_voice_host(&dir, &inst.flavor).unwrap_or_default();
+        let host = match mc_voicechat::voice_host_update(linked, lookup) {
+            mc_voicechat::HostUpdate::Set(a) => a,
+            mc_voicechat::HostUpdate::Clear => String::new(),
+            mc_voicechat::HostUpdate::Keep => before.clone(),
+        };
+        if let Err(e) = mc_voicechat::write_config(&dir, &inst.flavor, v.port, Some(&host)) {
             tracing::warn!("could not update voice chat config: {e}");
+            return;
+        }
+        let console = self.console(&inst.id);
+        if host.is_empty() {
+            console.push(
+                LogStream::System,
+                format!("Voice chat: players connect on port {} (not shared online).", v.port),
+            );
+        } else {
+            console.push(LogStream::System, format!("Voice chat: players connect to {host}"));
+        }
+        if host != before && self.is_active(&inst.id) {
+            console.push(
+                LogStream::System,
+                "Voice chat address changed. Restart the server to apply.",
+            );
         }
     }
 
@@ -1098,6 +1121,8 @@ impl ServerManager {
                 .create_tunnel(None, "udp", v.port, &format!("Hearth voice: {}", inst.name))
                 .await?;
         }
+        // Write the address right away rather than waiting for the next start.
+        self.sync_voice_host(inst).await;
         Ok(())
     }
 

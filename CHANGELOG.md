@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.1] - 2026-11-09
+
+### Fixed
+- Voice chat didn't connect for players joining through playit when voice chat was added to a server that was already shared: the voice tunnel was created, but its address only reached the mod on a later start. Hearth now writes the address as soon as the tunnel exists (and on every start), never clears it because of a failed playit lookup, and shows in the console which address players' voice connects to.
+
 ## [0.6.0] - 2026-11-09
 
 ### Added

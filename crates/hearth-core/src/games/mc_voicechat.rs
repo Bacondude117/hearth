@@ -62,6 +62,29 @@ pub fn write_config(server_dir: &Path, flavor: &str, port: u16, voice_host: Opti
     p.save(&path)
 }
 
+/// What to do with `voice_host` given playit's state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HostUpdate {
+    /// Players connect to this public address (the voice tunnel).
+    Set(String),
+    /// Not shared online: players use the game's own address.
+    Clear,
+    /// Leave the current value (lookup failed, or the tunnel has no address yet).
+    Keep,
+}
+
+/// `lookup` is the voice tunnel's address from playit (`Ok(None)` = no voice tunnel).
+pub fn voice_host_update(playit_linked: bool, lookup: std::result::Result<Option<String>, ()>) -> HostUpdate {
+    if !playit_linked {
+        return HostUpdate::Clear;
+    }
+    match lookup {
+        Ok(Some(a)) if !a.trim().is_empty() => HostUpdate::Set(a.trim().to_owned()),
+        Ok(Some(_)) | Err(()) => HostUpdate::Keep,
+        Ok(None) => HostUpdate::Clear,
+    }
+}
+
 pub fn read_voice_host(server_dir: &Path, flavor: &str) -> Option<String> {
     Properties::load(&config_path(server_dir, flavor))
         .ok()?
@@ -174,6 +197,26 @@ mod tests {
         );
         write_config(t.path(), "fabric", 24460, None).unwrap();
         assert_eq!(read_voice_host(t.path(), "fabric").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn voice_host_updates() {
+        use HostUpdate::*;
+        let addr = || Ok(Some("chords-mmf.tun.ply.gg:19748".to_string()));
+        assert_eq!(
+            voice_host_update(true, addr()),
+            Set("chords-mmf.tun.ply.gg:19748".into())
+        );
+        assert_eq!(
+            voice_host_update(true, Ok(None)),
+            Clear,
+            "not shared: players use the game address"
+        );
+        assert_eq!(voice_host_update(false, addr()), Clear, "playit unlinked");
+        // A failed lookup must never wipe a working address.
+        assert_eq!(voice_host_update(true, Err(())), Keep);
+        // playit can list a new tunnel before its address is assigned.
+        assert_eq!(voice_host_update(true, Ok(Some(String::new()))), Keep);
     }
 
     #[test]
