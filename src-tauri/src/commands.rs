@@ -142,17 +142,12 @@ pub async fn pick_pack_file(app: AppHandle) -> R<Option<String>> {
 
 #[tauri::command]
 pub async fn inspect_pack(state: State<'_, AppState>, path: String) -> R<PackInfo> {
-    let manager = state.manager.clone();
-    // Opening big zips is blocking work.
-    tauri::async_runtime::spawn_blocking(move || manager.inspect_pack(std::path::Path::new(&path)))
-        .await
-        .map_err(e)?
-        .map_err(e)
+    state.manager.inspect_pack(std::path::Path::new(&path)).await.map_err(e)
 }
 
 #[tauri::command]
 pub async fn import_pack(state: State<'_, AppState>, req: ImportPack) -> R<ServerSummary> {
-    let inst = state.manager.import_pack(req).map_err(e)?;
+    let inst = state.manager.import_pack(req).await.map_err(e)?;
     state.manager.get(&inst.id).map_err(e)
 }
 

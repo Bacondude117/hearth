@@ -72,6 +72,8 @@ pub struct ServerProcess {
     players: Mutex<BTreeSet<String>>,
     stdin: tokio::sync::Mutex<Option<ChildStdin>>,
     stop_requested: AtomicBool,
+    /// Set when the log reports a fatal error, so a following exit code 0 isn't "Stopped".
+    crash_seen: AtomicBool,
     kill_tx: Mutex<Option<oneshot::Sender<()>>>,
     exited: watch::Receiver<bool>,
     console: Arc<Console>,
@@ -120,6 +122,7 @@ impl ServerProcess {
             players: Mutex::new(BTreeSet::new()),
             stdin: tokio::sync::Mutex::new(stdin),
             stop_requested: AtomicBool::new(false),
+            crash_seen: AtomicBool::new(false),
             kill_tx: Mutex::new(Some(kill_tx)),
             exited: exit_rx,
             console,
@@ -149,8 +152,12 @@ impl ServerProcess {
 
             let code = status.ok().and_then(|s| s.code());
             let requested = p.stop_requested.load(Ordering::SeqCst);
-            let final_status =
-                if requested || code == Some(0) { ServerStatus::Stopped } else { ServerStatus::Crashed { code } };
+            let crashed = p.crash_seen.load(Ordering::SeqCst);
+            let final_status = if !crashed && (requested || code == Some(0)) {
+                ServerStatus::Stopped
+            } else {
+                ServerStatus::Crashed { code }
+            };
             p.console.push(
                 LogStream::System,
                 match &final_status {
@@ -206,6 +213,7 @@ impl ServerProcess {
                 self.players.lock().unwrap().remove(&n);
                 self.emit_players();
             }
+            LineEvent::Crashed => self.crash_seen.store(true, Ordering::SeqCst),
         }
     }
 

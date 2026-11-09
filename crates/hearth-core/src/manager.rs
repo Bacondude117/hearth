@@ -565,12 +565,12 @@ impl ServerManager {
     // ---- modpacks -----------------------------------------------------------------------------
 
     /// Reads a pack file and reports what it contains, without creating anything.
-    pub fn inspect_pack(&self, file: &std::path::Path) -> Result<PackInfo> {
+    pub async fn inspect_pack(&self, file: &std::path::Path) -> Result<PackInfo> {
         if !file.is_file() {
             return Err(Error::InvalidInput("That file doesn't exist anymore.".into()));
         }
         for info in self.registry.infos() {
-            if let Some(r) = self.registry.get(info.id)?.inspect_pack(file) {
+            if let Some(r) = self.registry.get(info.id)?.inspect_pack(&self.ctx, file).await {
                 return r;
             }
         }
@@ -578,8 +578,8 @@ impl ServerManager {
     }
 
     /// Creates a server from a modpack and starts installing it.
-    pub fn import_pack(self: &Arc<Self>, req: ImportPack) -> Result<Instance> {
-        let info = self.inspect_pack(&req.file)?;
+    pub async fn import_pack(self: &Arc<Self>, req: ImportPack) -> Result<Instance> {
+        let info = self.inspect_pack(&req.file).await?;
         let flavor = req
             .loader
             .clone()

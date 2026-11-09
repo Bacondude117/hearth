@@ -95,3 +95,12 @@ async fn spawn_failure_is_a_readable_error() {
     let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink).err().unwrap();
     assert!(err.to_string().contains("Could not start the server"), "{err}");
 }
+
+#[tokio::test]
+async fn crash_report_counts_as_crash_even_with_exit_code_zero() {
+    let (p, _console, _sink) = spawn("normal");
+    eventually(|| p.status() == ServerStatus::Running).await;
+    p.send_command("selfcrash").await.unwrap();
+    p.wait().await;
+    assert_eq!(p.status(), ServerStatus::Crashed { code: Some(0) });
+}

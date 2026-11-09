@@ -94,6 +94,8 @@ pub enum LineEvent {
     Ready,
     PlayerJoined(String),
     PlayerLeft(String),
+    /// The server hit a fatal error (it may still exit with code 0 afterwards).
+    Crashed,
 }
 
 /// Install progress callback: stage label + optional fraction.
@@ -150,7 +152,7 @@ pub trait GameProvider: Send + Sync {
     }
 
     /// `Some` when `file` is a modpack this game can import.
-    fn inspect_pack(&self, _file: &Path) -> Option<Result<PackInfo>> {
+    async fn inspect_pack(&self, _ctx: &GameContext, _file: &Path) -> Option<Result<PackInfo>> {
         None
     }
 

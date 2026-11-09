@@ -213,7 +213,7 @@ async fn imports_and_boots_mrpack() {
     w.write_all(b"server").unwrap();
     w.finish().unwrap();
 
-    let info = m.inspect_pack(&pack).unwrap();
+    let info = m.inspect_pack(&pack).await.unwrap();
     println!("{info:?}");
     assert_eq!(info.mod_count, 1);
     assert!(!info.needs_input);
@@ -228,6 +228,7 @@ async fn imports_and_boots_mrpack() {
             minecraft: None,
             loader: None,
         })
+        .await
         .unwrap();
     wait_installed(&m, &inst.id).await;
     let dir = m.server_dir(&inst.id).unwrap();
@@ -242,4 +243,25 @@ async fn imports_and_boots_mrpack() {
 
     boot_and_stop(&m, &inst.id).await;
     assert!(m.console_lines(&inst.id).iter().any(|l| l.text.contains("fabric-api") || l.text.contains("Loading") ));
+}
+
+/// The real Fabulously Optimized pack marks every file server-"required" but is a client pack.
+#[tokio::test]
+#[ignore]
+async fn flags_client_only_modpacks() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let client = hearth_core::http::client();
+    let versions: serde_json::Value = client
+        .get("https://api.modrinth.com/v2/project/fabulously-optimized/version")
+        .send().await.unwrap().json().await.unwrap();
+    let url = versions[0]["files"].as_array().unwrap().iter().find(|f| f["primary"] == true).unwrap()["url"].as_str().unwrap().to_owned();
+    let pack = tmp.path().join("fo.mrpack");
+    std::fs::write(&pack, client.get(url).send().await.unwrap().bytes().await.unwrap()).unwrap();
+
+    let info = m.inspect_pack(&pack).await.unwrap();
+    println!("{info:#?}");
+    assert!(info.warnings.iter().any(|w| w.contains("client-side modpack")), "{:?}", info.warnings);
+    assert!(info.mod_count < 20, "client mods filtered out, got {}", info.mod_count);
+    assert!(info.notes.iter().any(|n| n.contains("client-only")));
 }

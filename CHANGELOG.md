@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2] - 2026-11-09
+
+### Fixed
+- Importing a **client-side modpack** (e.g. Fabulously Optimized) installed every client mod on the server, because such packs mark all files as server-required. Hearth now checks each mod on Modrinth and skips the ones Modrinth lists as client-only, and the import dialog warns when the pack itself is client-only.
+- A server that crashed and wrote a crash report showed as **Stopped** because Minecraft exits with code 0 afterwards. It now shows as **Crashed**.
+
 ## [0.3.1] - 2026-11-09
 
 ### Fixed

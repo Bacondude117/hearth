@@ -261,9 +261,12 @@ impl GameProvider for MinecraftJava {
         Some(&super::java_players::JavaPlayers)
     }
 
-    fn inspect_pack(&self, file: &Path) -> Option<Result<PackInfo>> {
+    async fn inspect_pack(&self, ctx: &GameContext, file: &Path) -> Option<Result<PackInfo>> {
         let ext = file.extension()?.to_string_lossy().to_lowercase();
-        matches!(ext.as_str(), "mrpack" | "zip").then(|| mc_packs::inspect(file))
+        if !matches!(ext.as_str(), "mrpack" | "zip") {
+            return None;
+        }
+        Some(mc_packs::inspect(&ctx.client, file).await)
     }
 
     fn content_folder(&self, inst: &Instance) -> Option<ContentFolder> {
@@ -437,6 +440,10 @@ pub(crate) fn parse_java_line(line: &str) -> Option<LineEvent> {
     if msg.starts_with("Done (") && msg.contains("For help, type") {
         return Some(LineEvent::Ready);
     }
+    // Minecraft writes a crash report, then shuts down "cleanly" with exit code 0.
+    if msg.starts_with("This crash report has been saved to:") || msg == "Encountered an unexpected exception" {
+        return Some(LineEvent::Crashed);
+    }
     // Minecraft 26.x logs server-sent messages as "System chat: <message>". Player chat never
     // starts this way (it starts with "<name>"), so this can't be spoofed from chat.
     let msg = msg.strip_prefix("System chat: ").unwrap_or(msg);
@@ -516,6 +523,16 @@ mod tests {
         // Other lines around a join must not count.
         assert_eq!(parse_java_line("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
         assert_eq!(parse_java_line("[22:53:06 INFO]: System chat: There are 1 of a max of 20 players online: Bacon_Dude117"), None);
+    }
+
+    #[test]
+    fn detects_crash_reports() {
+        assert_eq!(
+            parse_java_line("[00:28:08] [Server thread/ERROR]: This crash report has been saved to: C:\\x\\crash.txt"),
+            Some(LineEvent::Crashed)
+        );
+        assert_eq!(parse_java_line("[00:28:08 ERROR]: Encountered an unexpected exception"), Some(LineEvent::Crashed));
+        assert_eq!(parse_java_line("[00:28:08 INFO]: <bob> Encountered an unexpected exception"), None);
     }
 
     #[test]

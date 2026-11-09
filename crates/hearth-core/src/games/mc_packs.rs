@@ -17,6 +17,7 @@ use crate::packs::{PackInfo, PackKind};
 
 /// Hosts a `.mrpack` may download from (Modrinth's format rules).
 const MRPACK_HOSTS: &[&str] = &["cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "gitlab.com"];
+const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 const PARALLEL_DOWNLOADS: usize = 6;
 /// How many bundled mod jars to open when guessing the loader from metadata.
 const MOD_SNIFF_LIMIT: usize = 40;
@@ -99,6 +100,140 @@ pub(crate) fn inspect_mrpack_index(index: &MrIndex) -> Result<PackInfo> {
     })
 }
 
+// ---- Modrinth metadata ------------------------------------------------------------------------
+//
+// A pack's own `env.server` flags are unreliable (client packs often mark every file "required").
+// Modrinth's per-project `server_side` is the better source, so look files up by hash.
+
+#[derive(Deserialize)]
+struct VersionRef {
+    project_id: String,
+}
+
+#[derive(Deserialize)]
+struct ProjectRef {
+    id: String,
+    #[serde(default)]
+    title: String,
+    server_side: String,
+}
+
+/// sha512 -> the file's Modrinth project `server_side` ("required", "optional", "unsupported",
+/// "unknown"). Files Modrinth doesn't know are absent.
+pub(crate) async fn modrinth_server_sides(client: &reqwest::Client, files: &[&MrFile]) -> Result<HashMap<String, String>> {
+    let hashes: Vec<&String> = files.iter().filter_map(|f| f.hashes.get("sha512")).collect();
+    if hashes.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let versions: HashMap<String, VersionRef> = client
+        .post(format!("{MODRINTH_API}/version_files"))
+        .json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha512" }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let mut ids: Vec<&str> = versions.values().map(|v| v.project_id.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut side_of_project: HashMap<String, String> = HashMap::new();
+    for chunk in ids.chunks(100) {
+        let projects: Vec<ProjectRef> = client
+            .get(format!("{MODRINTH_API}/projects"))
+            .query(&[("ids", serde_json::to_string(chunk).expect("serializes"))])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        side_of_project.extend(projects.into_iter().map(|p| (p.id, p.server_side)));
+    }
+    Ok(versions
+        .into_iter()
+        .filter_map(|(hash, v)| side_of_project.get(&v.project_id).map(|s| (hash, s.clone())))
+        .collect())
+}
+
+/// Splits files into those to install and the names of those Modrinth says can't run on a server.
+pub(crate) fn split_by_server_support<'a>(files: Vec<&'a MrFile>, sides: &HashMap<String, String>) -> (Vec<&'a MrFile>, Vec<String>) {
+    let mut skipped = vec![];
+    let kept = files
+        .into_iter()
+        .filter(|f| {
+            let unsupported = f.hashes.get("sha512").and_then(|h| sides.get(h)).is_some_and(|s| s == "unsupported");
+            if unsupported {
+                skipped.push(
+                    Path::new(&f.path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| f.path.clone()),
+                );
+            }
+            !unsupported
+        })
+        .collect();
+    (kept, skipped)
+}
+
+/// The pack's own Modrinth project, found by the file's hash: (title, server_side).
+async fn modrinth_pack_project(client: &reqwest::Client, file: &Path) -> Option<(String, String)> {
+    use sha2::Digest;
+    let path = file.to_path_buf();
+    let sha = tokio::task::spawn_blocking(move || -> Option<String> {
+        let mut f = std::fs::File::open(path).ok()?;
+        let mut h = sha2::Sha512::new();
+        std::io::copy(&mut f, &mut h).ok()?;
+        Some(hex::encode(h.finalize()))
+    })
+    .await
+    .ok()??;
+    let v: VersionRef = client
+        .get(format!("{MODRINTH_API}/version_file/{sha}"))
+        .query(&[("algorithm", "sha512")])
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    let p: ProjectRef = client.get(format!("{MODRINTH_API}/project/{}", v.project_id)).send().await.ok()?.json().await.ok()?;
+    Some((p.title, p.server_side))
+}
+
+/// Adds Modrinth's view of which mods (and whether the pack itself) can run on a server.
+async fn enrich_mrpack_info(client: &reqwest::Client, file: &Path, index: &MrIndex, info: &mut PackInfo) {
+    let server: Vec<&MrFile> = index.files.iter().filter(|f| f.on_server()).collect();
+    match modrinth_server_sides(client, &server).await {
+        Ok(sides) => {
+            let (kept, skipped) = split_by_server_support(server, &sides);
+            if !skipped.is_empty() {
+                let shown: Vec<&str> = skipped.iter().take(5).map(String::as_str).collect();
+                info.notes.push(format!(
+                    "{} more mod{} that Modrinth lists as client-only will be skipped ({}{}).",
+                    skipped.len(),
+                    if skipped.len() == 1 { "" } else { "s" },
+                    shown.join(", "),
+                    if skipped.len() > shown.len() { ", …" } else { "" }
+                ));
+            }
+            info.mod_count = kept.iter().filter(|f| f.path.starts_with("mods/")).count();
+        }
+        Err(e) => {
+            tracing::warn!("Modrinth lookup failed: {e}");
+            info.notes.push("Couldn't reach Modrinth to double-check which mods are client-only; using the pack's own labels.".into());
+        }
+    }
+    if let Some((title, side)) = modrinth_pack_project(client, file).await {
+        if side == "unsupported" {
+            info.warnings.insert(
+                0,
+                format!(
+                    "{title} is a client-side modpack: it's made for players' PCs, not servers, and its mods may crash the server. Look for the pack's server pack, or a modpack that supports servers."
+                ),
+            );
+        }
+    }
+}
+
 fn read_mrpack_index(file: &Path) -> Result<MrIndex> {
     let f = std::fs::File::open(file).at(file)?;
     let mut z = zip::ZipArchive::new(f).map_err(|e| Error::Archive(e.to_string()))?;
@@ -132,7 +267,14 @@ fn validate_mr_file(f: &MrFile) -> Result<()> {
 
 async fn unpack_mrpack(ctx: &GameContext, file: &Path, dir: &Path, progress: Progress<'_>) -> Result<()> {
     let index = read_mrpack_index(file)?;
-    let files: Vec<MrFile> = index.files.into_iter().filter(|f| f.on_server()).collect();
+    let server: Vec<&MrFile> = index.files.iter().filter(|f| f.on_server()).collect();
+    let files: Vec<&MrFile> = match modrinth_server_sides(&ctx.client, &server).await {
+        Ok(sides) => split_by_server_support(server, &sides).0,
+        Err(e) => {
+            tracing::warn!("Modrinth lookup failed, using the pack's own server flags: {e}");
+            server
+        }
+    };
     for f in &files {
         validate_mr_file(f)?;
     }
@@ -343,11 +485,16 @@ pub fn is_mrpack(file: &Path) -> bool {
     file.extension().is_some_and(|e| e.eq_ignore_ascii_case("mrpack"))
 }
 
-pub fn inspect(file: &Path) -> Result<PackInfo> {
+pub async fn inspect(client: &reqwest::Client, file: &Path) -> Result<PackInfo> {
     if is_mrpack(file) {
-        inspect_mrpack_index(&read_mrpack_index(file)?)
+        let index = read_mrpack_index(file)?;
+        let mut info = inspect_mrpack_index(&index)?;
+        enrich_mrpack_info(client, file, &index, &mut info).await;
+        Ok(info)
     } else {
-        inspect_server_zip(file)
+        let file = file.to_path_buf();
+        // Sniffing bundled jars can read a lot of data.
+        tokio::task::spawn_blocking(move || inspect_server_zip(&file)).await.expect("inspect task panicked")
     }
 }
 
@@ -397,6 +544,23 @@ mod tests {
         assert_eq!(info.notes, vec!["2 client-only files will be skipped."]);
         assert!(info.warnings.is_empty(), "{:?}", info.warnings);
         assert!(!info.needs_input);
+    }
+
+    #[test]
+    fn modrinth_server_support_overrides_pack_flags() {
+        let file = |path: &str, sha: &str| MrFile {
+            path: path.into(),
+            hashes: [("sha512".to_string(), sha.to_string())].into(),
+            env: Some(MrEnv { server: Some("required".into()) }),
+            downloads: vec!["https://cdn.modrinth.com/a.jar".into()],
+        };
+        let files = vec![file("mods/iris.jar", "aa"), file("mods/lithium.jar", "bb"), file("mods/unknown.jar", "cc")];
+        let sides: HashMap<String, String> =
+            [("aa".to_string(), "unsupported".to_string()), ("bb".to_string(), "optional".to_string())].into();
+        let (kept, skipped) = split_by_server_support(files.iter().collect(), &sides);
+        let kept: Vec<&str> = kept.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(kept, vec!["mods/lithium.jar", "mods/unknown.jar"], "unknown projects are kept");
+        assert_eq!(skipped, vec!["iris"]);
     }
 
     #[test]
@@ -486,7 +650,7 @@ mod tests {
         assert!(inspect_server_zip(&p).unwrap_err().to_string().contains("doesn't look like"));
         let p = tmp.path().join("not-a-zip.zip");
         std::fs::write(&p, b"hello").unwrap();
-        assert!(inspect(&p).is_err());
+        assert!(inspect_server_zip(&p).is_err());
     }
 
     #[tokio::test]
