@@ -44,7 +44,7 @@ forward events to the webview. This keeps the logic testable on CI without a GUI
 
 | Module | Responsibility |
 |---|---|
-| `paths` | Data layout under `%APPDATA%\Hearth` (`instances/`, `runtimes/`, `tools/`, `playit/`) |
+| `paths` | Data layout under the Tauri app-data dir (`%APPDATA%\app.hearth.desktop`) (`instances/`, `runtimes/`, `tools/`, `playit/`) |
 | `http` | Shared client (User-Agent required by PaperMC), streamed downloads with progress + SHA-1/SHA-256 verification |
 | `archive` | Zip extraction with path-traversal guard, optional strip of the top-level folder, preserve-list for updates |
 | `properties` | `server.properties` read/edit that preserves comments and order |

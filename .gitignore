@@ -3,3 +3,4 @@ node_modules/
 /ui/dist
 *.part
 .DS_Store
+src-tauri/gen/

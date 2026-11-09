@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the main window. Links and folders are opened by Rust commands that validate their arguments, so no opener permissions are granted to the web view.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-/// On-disk layout. Everything lives under one root (normally `%APPDATA%\Hearth`).
+/// On-disk layout. Everything lives under one root (normally `%APPDATA%\app.hearth.desktop`).
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     root: PathBuf,
