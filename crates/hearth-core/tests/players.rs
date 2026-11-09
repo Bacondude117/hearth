@@ -102,3 +102,37 @@ async fn bedrock_role_needs_a_known_xuid() {
         .unwrap_err();
     assert!(err.to_string().contains("join the server once"), "{err}");
 }
+
+#[tokio::test]
+async fn custom_icons_reach_the_game_and_the_summary() {
+    let tmp = tempfile::tempdir().unwrap();
+    installed(tmp.path(), "java-0002", "minecraft-java");
+    installed(tmp.path(), "bed-0002", "minecraft-bedrock");
+    let src = tmp.path().join("me.png");
+    image::DynamicImage::ImageRgba8(image::RgbaImage::new(200, 100))
+        .save(&src)
+        .unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+
+    assert_eq!(m.get("java-0002").unwrap().icon_version, None);
+    m.set_icon("java-0002", &src).unwrap();
+    assert!(m.get("java-0002").unwrap().icon_version.is_some());
+    assert!(AppPaths::new(tmp.path())
+        .server_dir("java-0002")
+        .join("server-icon.png")
+        .exists());
+    assert!(m.icon_data_url("java-0002").unwrap().is_some());
+
+    m.set_icon("bed-0002", &src).unwrap();
+    assert!(!AppPaths::new(tmp.path())
+        .server_dir("bed-0002")
+        .join("server-icon.png")
+        .exists());
+
+    m.clear_icon("java-0002").unwrap();
+    assert_eq!(m.get("java-0002").unwrap().icon_version, None);
+    assert!(!AppPaths::new(tmp.path())
+        .server_dir("java-0002")
+        .join("server-icon.png")
+        .exists());
+}

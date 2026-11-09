@@ -9,6 +9,7 @@ pub mod error;
 pub mod events;
 pub mod games;
 pub mod http;
+pub mod icons;
 pub mod instance;
 pub mod java;
 pub mod manager;

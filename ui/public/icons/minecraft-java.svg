@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c4a2a"/><stop offset="1" stop-color="#1a2c19"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- isometric block: grass top, earth sides -->
+  <path d="M32 11 L53 23 L32 35 L11 23 Z" fill="#74c54e"/>
+  <path d="M32 11 L53 23 L49 25.3 L32 15.5 L15 25.3 L11 23 Z" fill="#8fd866" opacity=".55"/>
+  <path d="M11 23 L32 35 L32 56 L11 44 Z" fill="#9a6a3f"/>
+  <path d="M53 23 L32 35 L32 56 L53 44 Z" fill="#7a5130"/>
+  <path d="M11 23 L32 35 L32 40 L11 28 Z" fill="#5fae3d"/>
+  <path d="M53 23 L32 35 L32 40 L53 28 Z" fill="#4a9230"/>
+  <path d="M15 33 l3 1.8 M23 38 l3 1.8 M17 41 l3 1.8 M41 39 l3 -1.8 M47 33 l3 -1.8 M44 45 l3 -1.8" stroke="#00000033" stroke-width="2" stroke-linecap="round"/>
+</svg>

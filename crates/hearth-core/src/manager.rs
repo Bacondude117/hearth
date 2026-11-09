@@ -47,6 +47,8 @@ pub struct ServerSummary {
     pub game_name: String,
     /// The server's mods/plugins folder, if it has one.
     pub content: Option<ContentFolder>,
+    /// Changes when the custom icon changes; `None` means the game's default icon.
+    pub icon_version: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -164,6 +166,7 @@ impl ServerManager {
             protocol,
             game_name,
             content,
+            icon_version: crate::icons::icon_version(&self.paths.instance_dir(&inst.id)),
             instance: inst,
         }
     }
@@ -743,6 +746,39 @@ impl ServerManager {
         self.changed();
         self.spawn_install(inst.id.clone(), true)?;
         Ok(inst)
+    }
+
+    // ---- icons --------------------------------------------------------------------------------
+
+    /// Uses the image at `file` as the server's icon (and the game's own icon file, if any).
+    pub fn set_icon(&self, id: &str, file: &std::path::Path) -> Result<()> {
+        let inst = self.store.get(id)?;
+        let game_icon = self.registry.get(&inst.game)?.server_icon_file();
+        crate::icons::set_icon(
+            file,
+            &self.paths.instance_dir(id),
+            &self.paths.server_dir(id),
+            game_icon,
+        )?;
+        if game_icon.is_some() && self.is_active(id) {
+            self.console(id)
+                .push(LogStream::System, "Icon saved. Restart the server so players see it.");
+        }
+        self.changed();
+        Ok(())
+    }
+
+    pub fn clear_icon(&self, id: &str) -> Result<()> {
+        let inst = self.store.get(id)?;
+        let game_icon = self.registry.get(&inst.game)?.server_icon_file();
+        crate::icons::clear_icon(&self.paths.instance_dir(id), &self.paths.server_dir(id), game_icon)?;
+        self.changed();
+        Ok(())
+    }
+
+    pub fn icon_data_url(&self, id: &str) -> Result<Option<String>> {
+        self.store.get(id)?;
+        crate::icons::icon_data_url(&self.paths.instance_dir(id))
     }
 
     // ---- mods / plugins -----------------------------------------------------------------------

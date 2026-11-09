@@ -70,7 +70,7 @@ const servers: Server[] = [
     installedBuild: "build 245", port: 25565, memoryMb: 4096, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: "t1",
     status: { state: "running" }, players: ["Alex", "Steve_2", "Notch"], protocol: "tcp", gameName: games[0].name,
-    launch: { kind: "jar", jar: "server.jar" }, pack: null, content: PLUGINS,
+    launch: { kind: "jar", jar: "server.jar" }, pack: null, content: PLUGINS, iconVersion: null,
   },
   {
     id: "cobblemon-7a8b", name: "Cobblemon", game: "minecraft-java", flavor: "fabric", version: "1.21.1",
@@ -78,21 +78,21 @@ const servers: Server[] = [
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
     launch: { kind: "jar", jar: "fabric-server-launch.jar" },
-    pack: { name: "Cobblemon Official Modpack [Fabric]", version: "1.8.4", file: null, loaderVersion: "0.20.1" }, content: MODS,
+    pack: { name: "Cobblemon Official Modpack [Fabric]", version: "1.8.4", file: null, loaderVersion: "0.20.1" }, content: MODS, iconVersion: null,
   },
   {
     id: "creative-3c4d", name: "Creative build", game: "minecraft-java", flavor: "vanilla", version: "26.3",
     installedBuild: null, port: 25566, memoryMb: 2048, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
-    launch: null, pack: null, content: null,
+    launch: null, pack: null, content: null, iconVersion: null,
   },
   {
     id: "bedrock-5e6f", name: "Family Bedrock", game: "minecraft-bedrock", flavor: "bedrock", version: "latest",
     installedBuild: "1.26.63.1", port: 19132, memoryMb: null, javaMajor: null, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "udp", gameName: games[1].name,
-    launch: null, pack: null, content: null,
+    launch: null, pack: null, content: null, iconVersion: null,
   },
 ];
 
@@ -101,7 +101,7 @@ servers.push({
   installedBuild: "build 20481234", port: 8211, memoryMb: null, javaMajor: null, jvmArgs: [],
   installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
   status: { state: "running" }, players: ["Bacon_Dude117", "PalTamer"], protocol: "udp", gameName: "Palworld",
-  launch: null, pack: null, content: null,
+  launch: null, pack: null, content: null, iconVersion: null,
 });
 
 const contentStore = new Map<string, ContentEntry[]>([
@@ -152,6 +152,7 @@ const playerStore = new Map<string, MockPlayer[]>([
   ]],
 ]);
 
+const icons = new Map<string, string>();
 const listeners = new Set<(p: unknown) => void>();
 const emit = (e: HearthEvent) => listeners.forEach((l) => l(e));
 
@@ -266,7 +267,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       port: req.port ?? g.defaultPort, memoryMb: req.memoryMb, javaMajor: null, jvmArgs: [],
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
-      launch: null, pack: null,
+      launch: null, pack: null, iconVersion: null,
       content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : null,
     };
     servers.push(s);
@@ -346,6 +347,31 @@ const handlers: Record<string, (a: any) => unknown> = {
     }
     if (s.status.state === "running") log(id, `> ${action.type} ${name}`, "system");
   },
+  // A generated original image stands in for the user's picture.
+  pick_server_icon: ({ id }) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const g = c.getContext("2d")!;
+    const grad = g.createLinearGradient(0, 0, 128, 128);
+    grad.addColorStop(0, "#f97316");
+    grad.addColorStop(1, "#7c3aed");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = "#fff";
+    g.font = "bold 64px sans-serif";
+    g.textAlign = "center";
+    g.fillText(find(id).name[0], 64, 86);
+    icons.set(id, c.toDataURL());
+    find(id).iconVersion = Date.now();
+    emit({ type: "instancesChanged" });
+    return true;
+  },
+  clear_server_icon: ({ id }) => {
+    icons.delete(id);
+    find(id).iconVersion = null;
+    emit({ type: "instancesChanged" });
+  },
+  server_icon: ({ id }) => icons.get(id) ?? null,
   pick_pack_file: () => "C:\\Users\\you\\Downloads\\Cobblemon Official Modpack [Fabric] 1.8.4.mrpack",
   inspect_pack: async () => {
     await sleep(600);

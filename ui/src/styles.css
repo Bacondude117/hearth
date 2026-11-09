@@ -118,29 +118,20 @@ button { font: inherit; color: inherit; }
 .hero { max-width: 440px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .hero h1 { font-size: 26px; }
 
-/* game icons: simple, original pixel-block marks */
-.game-icon { width: 30px; height: 30px; border-radius: 8px; flex: none; display: inline-block; position: relative; }
+/* game icons: original artwork in /icons (custom server icons replace these per server) */
+.game-icon {
+  width: 30px; height: 30px; border-radius: 8px; flex: none; display: inline-block; object-fit: cover;
+  background: url(/icons/server.svg) center / cover no-repeat;
+}
 .game-icon.big { width: 48px; height: 48px; border-radius: 12px; }
-.game-icon.minecraft-java {
-  background:
-    linear-gradient(#5aa335 0 34%, transparent 34%),
-    repeating-linear-gradient(90deg, #8a5a33 0 25%, #7a4e2b 25% 50%);
-}
-.game-icon.palworld {
-  /* paw print */
-  background:
-    radial-gradient(ellipse 22% 18% at 50% 66%, #fff 0 98%, transparent 100%),
-    radial-gradient(circle at 26% 44%, #fff 0 9%, transparent 10%),
-    radial-gradient(circle at 41% 30%, #fff 0 9%, transparent 10%),
-    radial-gradient(circle at 59% 30%, #fff 0 9%, transparent 10%),
-    radial-gradient(circle at 74% 44%, #fff 0 9%, transparent 10%),
-    linear-gradient(160deg, #3fb8c9, #2470a8);
-}
-.game-icon.minecraft-bedrock {
-  background:
-    linear-gradient(#e0e0e0 0 30%, transparent 30%),
-    repeating-linear-gradient(90deg, #6b6f76 0 25%, #585c63 25% 50%);
-}
+.game-icon.minecraft-java { background-image: url(/icons/minecraft-java.svg); }
+.game-icon.minecraft-bedrock { background-image: url(/icons/minecraft-bedrock.svg); }
+.game-icon.palworld { background-image: url(/icons/palworld.svg); }
+img.game-icon { background: none; }
+.icon-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.icon-text { flex: 1; min-width: 0; }
+.icon-text p { margin: 2px 0 0; }
+.btn-row.tight { margin-top: 0; flex: none; }
 
 /* ---- status --------------------------------------------------------------------------- */
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--idle); }

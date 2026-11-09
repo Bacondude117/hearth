@@ -4,6 +4,7 @@ import { Modal } from "./components/Modal";
 import { ImportPackDialog } from "./components/ImportPackDialog";
 import { NewServerDialog } from "./components/NewServerDialog";
 import { PlayitPage } from "./components/PlayitPage";
+import { ServerIcon } from "./components/ServerIcon";
 import { ServerView } from "./components/ServerView";
 import { useToast } from "./components/Toasts";
 import { displayState, errorText, flavorLabel } from "./util";
@@ -135,7 +136,7 @@ export function App() {
             const active = view.kind === "server" && view.id === s.id;
             return (
               <button key={s.id} className={`server-item ${active ? "active" : ""}`} aria-current={active} onClick={() => setView({ kind: "server", id: s.id })}>
-                <span className={`game-icon ${s.game}`} aria-hidden />
+                <ServerIcon server={s} />
                 <span className="si-text">
                   <span className="si-name">{s.name}</span>
                   <span className="si-sub">{flavorLabel(s)}</span>

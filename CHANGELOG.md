@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0] - 2026-11-09
+
+### Added
+- **Custom server icons.** Choose any picture in a server's Settings; Hearth crops it square and shows it in the sidebar and header. For Minecraft Java servers it also becomes the `server-icon.png` players see next to your server in their multiplayer list.
+
+### Changed
+- New default icons for Minecraft Java, Minecraft Bedrock and Palworld servers (original artwork).
+
 ## [0.4.2] - 2026-11-09
 
 ### Changed

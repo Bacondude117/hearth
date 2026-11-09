@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#46c3d1"/><stop offset="1" stop-color="#2367a8"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- paw print -->
+  <g fill="#fff">
+    <path d="M32 31 c-7 0 -13 6.5 -13 12.5 c0 4.5 3.6 6.5 7 6.5 c2.6 0 4 -1.4 6 -1.4 s3.4 1.4 6 1.4 c3.4 0 7 -2 7 -6.5 c0 -6 -6 -12.5 -13 -12.5 z"/>
+    <ellipse cx="17.5" cy="29" rx="4.6" ry="5.8" transform="rotate(-20 17.5 29)"/>
+    <ellipse cx="26.5" cy="19.5" rx="4.6" ry="6.2" transform="rotate(-8 26.5 19.5)"/>
+    <ellipse cx="37.5" cy="19.5" rx="4.6" ry="6.2" transform="rotate(8 37.5 19.5)"/>
+    <ellipse cx="46.5" cy="29" rx="4.6" ry="5.8" transform="rotate(20 46.5 29)"/>
+  </g>
+</svg>

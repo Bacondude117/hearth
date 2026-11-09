@@ -234,6 +234,12 @@ pub trait GameProvider: Send + Sync {
         None
     }
 
+    /// The game's own server-icon file (name in the server folder, pixel size), if players see
+    /// one (Minecraft Java's `server-icon.png`).
+    fn server_icon_file(&self) -> Option<(&'static str, u32)> {
+        None
+    }
+
     /// Display name and version of an add-on file.
     fn describe_content(&self, _file: &Path) -> Option<(String, Option<String>)> {
         None

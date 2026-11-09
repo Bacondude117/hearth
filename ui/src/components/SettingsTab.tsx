@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, isActive, type AppInfo, type GameInfo, type GameVersion, type Server } from "../api";
 import { errorText, formatMb } from "../util";
 import { Modal } from "./Modal";
+import { ServerIcon } from "./ServerIcon";
 import { useToast } from "./Toasts";
 
 type Field =
@@ -140,6 +141,37 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
     <div className="settings">
       <section className="card">
         <h3>General</h3>
+        <div className="icon-row">
+          <ServerIcon server={server} big />
+          <div className="icon-text">
+            <strong>Icon</strong>
+            <p className="muted small">
+              {server.game === "minecraft-java"
+                ? "Shown in Hearth, and to players next to your server in their multiplayer list (after a restart)."
+                : "Shown in Hearth's server list."}{" "}
+              Any picture works; it's cropped to a square.
+            </p>
+          </div>
+          <div className="btn-row tight">
+            <button
+              className="btn small"
+              onClick={async () => {
+                try {
+                  if (await api.pickServerIcon(server.id)) toast("Icon updated", "success");
+                } catch (e) {
+                  toast(errorText(e), "error");
+                }
+              }}
+            >
+              Choose image…
+            </button>
+            {server.iconVersion != null && (
+              <button className="btn ghost small" onClick={() => api.clearServerIcon(server.id).catch((e) => toast(errorText(e), "error"))}>
+                Use default
+              </button>
+            )}
+          </div>
+        </div>
         <div className="grid2">
           <label className="field">
             <span>Name in Hearth</span>

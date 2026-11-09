@@ -23,6 +23,8 @@ rand = "0.8"
 flate2 = "1"
 tar = "0.4"
 md-5 = "0.10"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_System_SystemInformation"] }

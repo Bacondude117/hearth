@@ -133,6 +133,37 @@ pub fn set_properties(state: State<'_, AppState>, id: String, changes: HashMap<S
     state.manager.set_properties(&id, changes).map_err(e)
 }
 
+/// Lets the user pick an image for the server's icon. Returns false if they cancelled.
+#[tauri::command]
+pub async fn pick_server_icon(app: AppHandle, state: State<'_, AppState>, id: String) -> R<bool> {
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Choose a server icon")
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif"])
+        .blocking_pick_file();
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(false);
+    };
+    let manager = state.manager.clone();
+    // Decoding and resizing is CPU work; keep it off the async workers.
+    tauri::async_runtime::spawn_blocking(move || manager.set_icon(&id, &path))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn clear_server_icon(state: State<'_, AppState>, id: String) -> R<()> {
+    state.manager.clear_icon(&id).map_err(e)
+}
+
+#[tauri::command]
+pub fn server_icon(state: State<'_, AppState>, id: String) -> R<Option<String>> {
+    state.manager.icon_data_url(&id).map_err(e)
+}
+
 /// Native "open file" dialog for a modpack. `None` if the user cancelled.
 #[tauri::command]
 pub async fn pick_pack_file(app: AppHandle) -> R<Option<String>> {

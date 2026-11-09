@@ -331,6 +331,11 @@ impl GameProvider for MinecraftJava {
         }
     }
 
+    fn server_icon_file(&self) -> Option<(&'static str, u32)> {
+        // Shown next to the server in players' multiplayer list; must be 64x64 PNG.
+        Some(("server-icon.png", 64))
+    }
+
     fn describe_content(&self, file: &Path) -> Option<(String, Option<String>)> {
         super::mc_content::describe_jar(file)
     }

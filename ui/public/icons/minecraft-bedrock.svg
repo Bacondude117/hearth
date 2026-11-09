@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3946"/><stop offset="1" stop-color="#1b222b"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- isometric stone block -->
+  <path d="M32 11 L53 23 L32 35 L11 23 Z" fill="#d5dbe2"/>
+  <path d="M11 23 L32 35 L32 56 L11 44 Z" fill="#8c949d"/>
+  <path d="M53 23 L32 35 L32 56 L53 44 Z" fill="#6c737c"/>
+  <path d="M20 21 l6 3.4 M34 17 l5 2.8 M38 26 l6 -3.4" stroke="#00000026" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M16 33 l5 2.9 l0 5 M25 43 l3 1.7 M44 36 l-5 2.9 l0 5 M48 44 l-3 1.7" stroke="#00000030" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>

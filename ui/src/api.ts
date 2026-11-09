@@ -39,6 +39,8 @@ export interface Server {
   pack: { name: string; version: string | null; file: string | null; loaderVersion: string | null } | null;
   /** The server's mods/plugins folder, if it has one. */
   content: { label: string; folder: string; extension: string } | null;
+  /** Changes when the custom icon changes; null = the game's default icon. */
+  iconVersion: number | null;
 }
 
 export interface PackInfo {
@@ -243,6 +245,9 @@ export const api = {
   consoleLines: (id: string) => call<LogLine[]>("console_lines", { id }),
   getProperties: (id: string) => call<[string, string][]>("get_properties", { id }),
   setProperties: (id: string, changes: Record<string, string>) => call<void>("set_properties", { id, changes }),
+  pickServerIcon: (id: string) => call<boolean>("pick_server_icon", { id }),
+  clearServerIcon: (id: string) => call<void>("clear_server_icon", { id }),
+  serverIcon: (id: string) => call<string | null>("server_icon", { id }),
   pickPackFile: () => call<string | null>("pick_pack_file"),
   inspectPack: (path: string) => call<PackInfo>("inspect_pack", { path }),
   importPack: (req: ImportPack) => call<Server>("import_pack", { req }),

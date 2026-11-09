@@ -5,6 +5,7 @@ import { Console } from "./Console";
 import { SettingsTab } from "./SettingsTab";
 import { ContentTab } from "./ContentTab";
 import { PlayersTab } from "./PlayersTab";
+import { ServerIcon } from "./ServerIcon";
 import { ShareTab } from "./ShareTab";
 import { useToast } from "./Toasts";
 
@@ -68,7 +69,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
     <section className="server-view">
       <header className="server-head">
         <div className="title-block">
-          <span className={`game-icon big ${server.game}`} aria-hidden />
+          <ServerIcon server={server} big />
           <div>
             <h1>{server.name}</h1>
             <p className="sub">
