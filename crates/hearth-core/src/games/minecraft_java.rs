@@ -635,6 +635,7 @@ mod tests {
             playit_tunnel_id: None,
             launch: None,
             pack: None,
+            voice: None,
         }
     }
 

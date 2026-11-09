@@ -101,6 +101,8 @@ pub fn run() {
             commands::console_lines,
             commands::get_properties,
             commands::set_properties,
+            commands::enable_voice,
+            commands::disable_voice,
             commands::pick_server_icon,
             commands::clear_server_icon,
             commands::server_icon,

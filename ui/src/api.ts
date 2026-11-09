@@ -41,6 +41,8 @@ export interface Server {
   content: { label: string; folder: string; extension: string } | null;
   /** Changes when the custom icon changes; null = the game's default icon. */
   iconVersion: number | null;
+  /** Simple Voice Chat, when installed through Hearth. */
+  voice: { port: number; file: string; version: string } | null;
 }
 
 export interface PackInfo {
@@ -245,6 +247,8 @@ export const api = {
   consoleLines: (id: string) => call<LogLine[]>("console_lines", { id }),
   getProperties: (id: string) => call<[string, string][]>("get_properties", { id }),
   setProperties: (id: string, changes: Record<string, string>) => call<void>("set_properties", { id, changes }),
+  enableVoice: (id: string) => call<void>("enable_voice", { id }),
+  disableVoice: (id: string) => call<void>("disable_voice", { id }),
   pickServerIcon: (id: string) => call<boolean>("pick_server_icon", { id }),
   clearServerIcon: (id: string) => call<void>("clear_server_icon", { id }),
   serverIcon: (id: string) => call<string | null>("server_icon", { id }),

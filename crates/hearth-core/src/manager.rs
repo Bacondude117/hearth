@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::content::{self, ContentEntry, ContentFolder};
 use crate::error::{Error, Result};
 use crate::events::{Event, EventSink, LogLine, LogStream};
+use crate::games::mc_voicechat;
 use crate::games::{GameContext, GameInfo, GameProvider, GameVersion, Registry};
 use crate::instance::PackSource;
 use crate::instance::{InstallState, Instance, InstanceStore};
@@ -188,9 +189,13 @@ impl ServerManager {
             .unwrap_or_default()
             .into_iter()
             .filter(|i| Some(i.id.as_str()) != except)
-            .flat_map(|i| match self.registry.get(&i.game) {
-                Ok(p) => p.ports_used(i.port).into_iter().map(|(n, _)| n).collect(),
-                Err(_) => vec![i.port],
+            .flat_map(|i| {
+                let mut ports: Vec<u16> = match self.registry.get(&i.game) {
+                    Ok(p) => p.ports_used(i.port).into_iter().map(|(n, _)| n).collect(),
+                    Err(_) => vec![i.port],
+                };
+                ports.extend(i.voice.as_ref().map(|v| v.port));
+                ports
             })
             .collect()
     }
@@ -289,6 +294,7 @@ impl ServerManager {
             playit_tunnel_id: None,
             launch: None,
             pack: None,
+            voice: None,
         };
         self.store.save(&inst)?;
         Ok(inst)
@@ -411,6 +417,20 @@ impl ServerManager {
             }
         }
         self.store.save(&inst)?;
+        // A version change needs the matching voice chat build.
+        if !fresh {
+            if let Some(v) = inst.voice.clone() {
+                match self.install_voice_jar(&inst).await {
+                    Ok((file, version)) => {
+                        inst.voice = Some(mc_voicechat::VoiceChat { file, version, ..v });
+                        self.store.save(&inst)?;
+                    }
+                    Err(e) => self
+                        .console(id)
+                        .push(LogStream::System, format!("Couldn't update voice chat: {e}")),
+                }
+            }
+        }
         Ok(())
     }
 
@@ -429,6 +449,7 @@ impl ServerManager {
                     tracing::warn!("could not delete tunnel {t}: {e}");
                 }
             }
+            self.remove_voice_tunnel(&inst).await;
         }
         self.store.delete(id)?;
         self.slots.lock().unwrap().remove(id);
@@ -452,6 +473,15 @@ impl ServerManager {
                     "Port {p} is already in use by another program. Close it or change this server's port in Settings."
                 )));
             }
+        }
+        if let Some(v) = &inst.voice {
+            if !net::port_is_free(v.port, Protocol::Udp) {
+                return Err(Error::Conflict(format!(
+                    "Voice chat port {} is already in use by another program.",
+                    v.port
+                )));
+            }
+            self.sync_voice_host(&inst).await;
         }
         let dir = self.paths.server_dir(id);
         let spec = provider.launch(&self.ctx, &inst, &dir)?;
@@ -934,6 +964,12 @@ impl ServerManager {
         self.playit.start().await?;
         inst.playit_tunnel_id = Some(tid);
         self.store.save(&inst)?;
+        if inst.voice.is_some() {
+            if let Err(e) = self.ensure_voice_tunnel(&inst).await {
+                self.console(id)
+                    .push(LogStream::System, format!("Couldn't create the voice chat tunnel: {e}"));
+            }
+        }
         self.changed();
         Ok(())
     }
@@ -947,10 +983,134 @@ impl ServerManager {
         if let Some(t) = tid {
             self.playit.delete_tunnel(&t).await?;
         }
+        self.remove_voice_tunnel(&inst).await;
         inst.playit_tunnel_id = None;
         self.store.save(&inst)?;
         self.changed();
         Ok(())
+    }
+
+    // ---- voice chat (Simple Voice Chat, Minecraft Java) -----------------------------------------
+
+    /// Installs Simple Voice Chat on a Paper/Fabric/Forge/NeoForge server with its own UDP port,
+    /// and opens a playit tunnel for it if the server is shared.
+    pub async fn enable_voice(&self, id: &str) -> Result<()> {
+        let mut inst = self.store.get(id)?;
+        if inst.voice.is_some() {
+            return Ok(());
+        }
+        if inst.install_state != InstallState::Installed {
+            return Err(Error::Conflict("Install the server first.".into()));
+        }
+        let port = crate::net::next_free_port(mc_voicechat::DEFAULT_PORT, Protocol::Udp, &self.reserved_ports(None))
+            .ok_or_else(|| Error::Conflict("No free port for voice chat.".into()))?;
+        let (file, version) = self.install_voice_jar(&inst).await?;
+        mc_voicechat::write_config(&self.paths.server_dir(id), &inst.flavor, port, None)?;
+        inst.voice = Some(mc_voicechat::VoiceChat { port, file, version });
+        self.store.save(&inst)?;
+        if self.playit.is_linked() && self.share_info(id).await.ok().flatten().is_some() {
+            if let Err(e) = self.ensure_voice_tunnel(&inst).await {
+                self.console(id)
+                    .push(LogStream::System, format!("Couldn't create the voice chat tunnel: {e}"));
+            }
+        }
+        if self.is_active(id) {
+            self.console(id).push(
+                LogStream::System,
+                "Voice chat installed. Restart the server to turn it on.",
+            );
+        }
+        self.changed();
+        Ok(())
+    }
+
+    pub async fn disable_voice(&self, id: &str) -> Result<()> {
+        let mut inst = self.store.get(id)?;
+        let Some(v) = inst.voice.take() else { return Ok(()) };
+        if let Ok((_, folder, dir)) = self.content_ctx(id) {
+            for name in [v.file.clone(), format!("{}{}", v.file, crate::content::DISABLED_SUFFIX)] {
+                let _ = content::delete(&dir, &folder, &name);
+            }
+        }
+        let with_voice = Instance {
+            voice: Some(v),
+            ..inst.clone()
+        };
+        self.remove_voice_tunnel(&with_voice).await;
+        self.store.save(&inst)?;
+        if self.is_active(id) {
+            self.console(id)
+                .push(LogStream::System, "Voice chat removed. Restart the server to apply.");
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Downloads the Simple Voice Chat build for the server's type and Minecraft version into
+    /// its mods/plugins folder, replacing an older copy. Returns (file name, version).
+    async fn install_voice_jar(&self, inst: &Instance) -> Result<(String, String)> {
+        let loader = mc_voicechat::modrinth_loader(&inst.flavor)
+            .ok_or_else(|| Error::InvalidInput("Voice chat needs a Paper, Fabric, Forge or NeoForge server.".into()))?;
+        let (_, folder, dir) = self.content_ctx(&inst.id)?;
+        let (url, sha512, file, version) = mc_voicechat::find_build(&self.ctx.client, loader, &inst.version).await?;
+        crate::content::check_file_name(&file)?;
+        if let Some(old) = &inst.voice {
+            if old.file != file {
+                let _ = content::delete(&dir, &folder, &old.file);
+            }
+        }
+        crate::http::download(
+            &self.ctx.client,
+            &url,
+            &dir.join(folder.folder).join(&file),
+            &crate::http::Checksum::Sha512(sha512),
+            |_| {},
+        )
+        .await?;
+        Ok((file, version))
+    }
+
+    /// Points the mod at the voice tunnel's public address (or clears it when not shared), so
+    /// players' clients connect to the right place.
+    async fn sync_voice_host(&self, inst: &Instance) {
+        let Some(v) = &inst.voice else { return };
+        let host = if self.playit.is_linked() {
+            self.playit
+                .tunnel_for_port(v.port, "udp")
+                .await
+                .ok()
+                .flatten()
+                .map(|t| t.address)
+        } else {
+            None
+        };
+        if let Err(e) =
+            mc_voicechat::write_config(&self.paths.server_dir(&inst.id), &inst.flavor, v.port, host.as_deref())
+        {
+            tracing::warn!("could not update voice chat config: {e}");
+        }
+    }
+
+    async fn ensure_voice_tunnel(&self, inst: &Instance) -> Result<()> {
+        let Some(v) = &inst.voice else { return Ok(()) };
+        if self.playit.tunnel_for_port(v.port, "udp").await?.is_none() {
+            self.playit
+                .create_tunnel(None, "udp", v.port, &format!("Hearth voice: {}", inst.name))
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn remove_voice_tunnel(&self, inst: &Instance) {
+        let Some(v) = &inst.voice else { return };
+        if !self.playit.is_linked() {
+            return;
+        }
+        if let Ok(Some(t)) = self.playit.tunnel_for_port(v.port, "udp").await {
+            if let Err(e) = self.playit.delete_tunnel(&t.id).await {
+                tracing::warn!("could not delete voice tunnel: {e}");
+            }
+        }
     }
 }
 

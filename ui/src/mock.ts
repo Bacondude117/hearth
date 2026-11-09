@@ -70,7 +70,7 @@ const servers: Server[] = [
     installedBuild: "build 245", port: 25565, memoryMb: 4096, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: "t1",
     status: { state: "running" }, players: ["Alex", "Steve_2", "Notch"], protocol: "tcp", gameName: games[0].name,
-    launch: { kind: "jar", jar: "server.jar" }, pack: null, content: PLUGINS, iconVersion: null,
+    launch: { kind: "jar", jar: "server.jar" }, pack: null, content: PLUGINS, iconVersion: null, voice: null,
   },
   {
     id: "cobblemon-7a8b", name: "Cobblemon", game: "minecraft-java", flavor: "fabric", version: "1.21.1",
@@ -78,21 +78,21 @@ const servers: Server[] = [
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
     launch: { kind: "jar", jar: "fabric-server-launch.jar" },
-    pack: { name: "Cobblemon Official Modpack [Fabric]", version: "1.8.4", file: null, loaderVersion: "0.20.1" }, content: MODS, iconVersion: null,
+    pack: { name: "Cobblemon Official Modpack [Fabric]", version: "1.8.4", file: null, loaderVersion: "0.20.1" }, content: MODS, iconVersion: null, voice: null,
   },
   {
     id: "creative-3c4d", name: "Creative build", game: "minecraft-java", flavor: "vanilla", version: "26.3",
     installedBuild: null, port: 25566, memoryMb: 2048, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
-    launch: null, pack: null, content: null, iconVersion: null,
+    launch: null, pack: null, content: null, iconVersion: null, voice: null,
   },
   {
     id: "bedrock-5e6f", name: "Family Bedrock", game: "minecraft-bedrock", flavor: "bedrock", version: "latest",
     installedBuild: "1.26.63.1", port: 19132, memoryMb: null, javaMajor: null, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "udp", gameName: games[1].name,
-    launch: null, pack: null, content: null, iconVersion: null,
+    launch: null, pack: null, content: null, iconVersion: null, voice: null,
   },
 ];
 
@@ -101,7 +101,7 @@ servers.push({
   installedBuild: "build 20481234", port: 8211, memoryMb: null, javaMajor: null, jvmArgs: [],
   installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
   status: { state: "running" }, players: ["Bacon_Dude117", "PalTamer"], protocol: "udp", gameName: "Palworld",
-  launch: null, pack: null, content: null, iconVersion: null,
+  launch: null, pack: null, content: null, iconVersion: null, voice: null,
 });
 
 const contentStore = new Map<string, ContentEntry[]>([
@@ -267,7 +267,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       port: req.port ?? g.defaultPort, memoryMb: req.memoryMb, javaMajor: null, jvmArgs: [],
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
-      launch: null, pack: null, iconVersion: null,
+      launch: null, pack: null, iconVersion: null, voice: null,
       content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : null,
     };
     servers.push(s);
@@ -348,6 +348,15 @@ const handlers: Record<string, (a: any) => unknown> = {
     if (s.status.state === "running") log(id, `> ${action.type} ${name}`, "system");
   },
   // A generated original image stands in for the user's picture.
+  enable_voice: async ({ id }) => {
+    await sleep(900);
+    find(id).voice = { port: 24454, file: "voicechat-fabric-2.6.27+26.3.jar", version: "fabric-2.6.27+26.3" };
+    emit({ type: "instancesChanged" });
+  },
+  disable_voice: ({ id }) => {
+    find(id).voice = null;
+    emit({ type: "instancesChanged" });
+  },
   pick_server_icon: ({ id }) => {
     const c = document.createElement("canvas");
     c.width = c.height = 128;

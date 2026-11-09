@@ -72,6 +72,13 @@ export function ShareTab({ server, game, playit, onOpenPlayit }: Props) {
             {JOIN_HELP[server.game] ?? "Give this address to your friends."}
           </p>
           {tunnel.disabledReason && <p className="form-error">playit reports: {tunnel.disabledReason}</p>}
+          {server.voice && (
+            <p className="muted small">
+              🎙 Voice chat is shared too
+              {playit.tunnels.some((t) => t.localPort === server.voice!.port) ? "" : " (setting up…)"}. Players with the Simple Voice
+              Chat mod connect to it automatically.
+            </p>
+          )}
           {!agentRunning && (
             <div className="banner warn">
               The playit agent isn't running, so this address won't work right now.

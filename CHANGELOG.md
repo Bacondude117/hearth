@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.0] - 2026-11-09
+
+### Added
+- **Voice chat for Minecraft Java** (Paper, Fabric, Forge, NeoForge): one click in the Mods/Plugins tab installs Simple Voice Chat for the server's Minecraft version, gives it its own voice port, and shares it through playit alongside the game when you use Share online. Hearth points the mod at the shared address so players' clients connect automatically. Players need the Simple Voice Chat mod in their game too.
+
 ## [0.5.0] - 2026-11-09
 
 ### Added

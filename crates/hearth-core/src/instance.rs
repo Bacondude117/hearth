@@ -42,6 +42,9 @@ pub struct Instance {
     /// The modpack this server was created from, if any.
     #[serde(default)]
     pub pack: Option<PackSource>,
+    /// Simple Voice Chat, when installed through Hearth.
+    #[serde(default)]
+    pub voice: Option<crate::games::mc_voicechat::VoiceChat>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -200,6 +203,7 @@ mod tests {
             playit_tunnel_id: None,
             launch: None,
             pack: None,
+            voice: None,
         }
     }
 

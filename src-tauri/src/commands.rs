@@ -133,6 +133,16 @@ pub fn set_properties(state: State<'_, AppState>, id: String, changes: HashMap<S
     state.manager.set_properties(&id, changes).map_err(e)
 }
 
+#[tauri::command]
+pub async fn enable_voice(state: State<'_, AppState>, id: String) -> R<()> {
+    state.manager.enable_voice(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn disable_voice(state: State<'_, AppState>, id: String) -> R<()> {
+    state.manager.disable_voice(&id).await.map_err(e)
+}
+
 /// Lets the user pick an image for the server's icon. Returns false if they cancelled.
 #[tauri::command]
 pub async fn pick_server_icon(app: AppHandle, state: State<'_, AppState>, id: String) -> R<bool> {

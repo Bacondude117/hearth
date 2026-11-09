@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, isActive, type ContentEntry, type Server } from "../api";
+import { api, isActive, type ContentEntry, type PlayitStatus, type Server } from "../api";
 import { errorText, formatBytes } from "../util";
 import { Modal } from "./Modal";
 import { useToast } from "./Toasts";
+import { VoiceChatCard } from "./VoiceChatCard";
 
 /** Mods (Fabric/Forge/NeoForge) or Plugins (Paper): add, enable/disable, delete jars. */
-export function ContentTab({ server }: { server: Server }) {
+export function ContentTab({ server, playit }: { server: Server; playit: PlayitStatus | null }) {
   const toast = useToast();
   const folder = server.content!;
   const noun = folder.label === "Plugins" ? "plugin" : "mod";
@@ -63,6 +64,7 @@ export function ContentTab({ server }: { server: Server }) {
 
   return (
     <div className="content-tab">
+      <VoiceChatCard server={server} playit={playit} />
       <div className="players-top">
         <div className="add-player">
           <button className="btn primary" onClick={add} disabled={busy}>

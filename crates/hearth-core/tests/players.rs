@@ -30,6 +30,7 @@ fn installed(root: &std::path::Path, id: &str, game: &str) {
         playit_tunnel_id: None,
         launch: None,
         pack: None,
+        voice: None,
     };
     InstanceStore::new(AppPaths::new(root)).save(&inst).unwrap();
     std::fs::create_dir_all(AppPaths::new(root).server_dir(id)).unwrap();
@@ -135,4 +136,24 @@ async fn custom_icons_reach_the_game_and_the_summary() {
         .server_dir("java-0002")
         .join("server-icon.png")
         .exists());
+}
+
+#[tokio::test]
+async fn voice_chat_ports_are_reserved() {
+    let tmp = tempfile::tempdir().unwrap();
+    installed(tmp.path(), "java-0003", "minecraft-java");
+    installed(tmp.path(), "java-0004", "minecraft-java");
+    let store = InstanceStore::new(AppPaths::new(tmp.path()));
+    let mut a = store.get("java-0003").unwrap();
+    a.voice = Some(hearth_core::games::mc_voicechat::VoiceChat {
+        port: 24454,
+        file: "voicechat-fabric.jar".into(),
+        version: "2.6".into(),
+    });
+    store.save(&a).unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let err = m
+        .set_properties("java-0004", [("server-port".to_string(), "24454".to_string())].into())
+        .unwrap_err();
+    assert!(err.to_string().contains("24454"), "{err}");
 }

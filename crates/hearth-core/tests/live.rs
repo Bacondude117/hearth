@@ -316,3 +316,43 @@ async fn flags_client_only_modpacks() {
     assert!(info.mod_count < 20, "client mods filtered out, got {}", info.mod_count);
     assert!(info.notes.iter().any(|n| n.contains("client-only")));
 }
+
+/// Simple Voice Chat on a real Fabric server: installs from Modrinth and its voice server starts.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn fabric_server_with_voice_chat() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let version = m.versions("minecraft-java", "fabric").await.unwrap()[0].id.clone();
+    let inst = m
+        .create(CreateServer {
+            name: "Voice Live".into(),
+            game: "minecraft-java".into(),
+            flavor: "fabric".into(),
+            version,
+            port: None,
+            memory_mb: Some(1536),
+            accept_eula: true,
+        })
+        .unwrap();
+    wait_installed(&m, &inst.id).await;
+    m.enable_voice(&inst.id).await.unwrap();
+    let s = m.get(&inst.id).unwrap().instance;
+    let v = s.voice.clone().unwrap();
+    println!("voice: {v:?}");
+    assert!(m.list_content(&inst.id).unwrap().iter().any(|c| c.file == v.file));
+
+    boot_and_stop(&m, &inst.id).await;
+    let log: Vec<String> = m.console_lines(&inst.id).into_iter().map(|l| l.text).collect();
+    let voice_lines: Vec<&String> = log.iter().filter(|l| l.to_lowercase().contains("voice chat")).collect();
+    println!("{voice_lines:#?}");
+    assert!(
+        voice_lines.iter().any(|l| l.contains(&v.port.to_string())),
+        "voice server should start on {}",
+        v.port
+    );
+
+    m.disable_voice(&inst.id).await.unwrap();
+    assert!(m.get(&inst.id).unwrap().instance.voice.is_none());
+    assert!(!m.list_content(&inst.id).unwrap().iter().any(|c| c.file == v.file));
+}

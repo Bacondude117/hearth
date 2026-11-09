@@ -15,6 +15,7 @@ through [playit.gg](https://playit.gg), so friends can join without router setup
 - **No Java install needed**: Hearth downloads the right Eclipse Temurin runtime for each Minecraft version
 - **Live console**: colored logs, command box with history, players online at a glance
 - **Players tab**: operator on/off, whitelist, ban/unban, kick and game mode per player, whether the server is running or not
+- **Voice chat**: one-click Simple Voice Chat for Paper and modded servers, shared online automatically
 - **Custom server icons**: any picture, also shown to Minecraft Java players in their server list
 - **Settings without file editing**: MOTD, game mode, difficulty, whitelist, port, memory and every raw `server.properties` key
 - **Share online**: link playit.gg once, then *Share online* creates a tunnel and shows the address to send to friends

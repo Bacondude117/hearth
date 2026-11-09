@@ -129,6 +129,7 @@ async fn start_poll_players_broadcast_kick_and_stop() {
             playit_tunnel_id: None,
             launch: None,
             pack: None,
+            voice: None,
         })
         .unwrap();
 

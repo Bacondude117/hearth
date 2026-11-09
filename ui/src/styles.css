@@ -371,6 +371,13 @@ input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
 .tag:not(.good):not(.bad) { background: var(--accent-soft); color: var(--accent); }
 .grow-text { flex-basis: 100%; margin: 0; }
 .content-tab { display: flex; flex-direction: column; gap: 14px; padding: 16px 2px 8px; }
+.voice-head { display: flex; align-items: center; gap: 12px; }
+.voice-icon { font-size: 22px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); flex: none; }
+.voice-text { flex: 1; min-width: 0; }
+.voice-text p { margin: 2px 0 0; }
+.voice-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0 48px; }
+.voice-facts dt { color: var(--muted); font-size: 13px; }
+.voice-facts dd { margin: 0; }
 .mod-name { font-weight: 600; }
 .players-table tr.disabled-row td { opacity: 0.55; }
 .players-table tr.disabled-row td:nth-child(n+3) { opacity: 1; }

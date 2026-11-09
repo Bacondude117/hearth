@@ -186,7 +186,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
           />
         )}
         {tab === "players" && <PlayersTab server={server} />}
-        {tab === "content" && server.content && <ContentTab server={server} />}
+        {tab === "content" && server.content && <ContentTab server={server} playit={playit} />}
         {tab === "settings" && <SettingsTab server={server} game={game} info={info} onDeleted={onDeleted} />}
         {tab === "share" && <ShareTab server={server} game={game} playit={playit} onOpenPlayit={onOpenPlayit} />}
       </div>

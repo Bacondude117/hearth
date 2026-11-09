@@ -6,6 +6,7 @@ pub mod java_players;
 pub mod mc_content;
 pub mod mc_loaders;
 pub mod mc_packs;
+pub mod mc_voicechat;
 pub mod minecraft_bedrock;
 pub mod minecraft_java;
 pub mod palworld;
