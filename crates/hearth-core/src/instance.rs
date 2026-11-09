@@ -36,6 +36,35 @@ pub struct Instance {
     /// playit tunnel that exposes this server, if any.
     #[serde(default)]
     pub playit_tunnel_id: Option<String>,
+    /// How to start a JVM server (set by the installer; `None` means `-jar server.jar`).
+    #[serde(default)]
+    pub launch: Option<JavaLaunch>,
+    /// The modpack this server was created from, if any.
+    #[serde(default)]
+    pub pack: Option<PackSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum JavaLaunch {
+    /// `java -jar <jar> nogui`
+    Jar { jar: String },
+    /// `java @<args_file> nogui` (Forge/NeoForge), paths relative to the server folder.
+    ArgsFile { args_file: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PackSource {
+    pub name: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    /// The pack file copied into the instance folder, until the install succeeds.
+    #[serde(default)]
+    pub file: Option<String>,
+    /// Loader build the pack asked for, if it named one.
+    #[serde(default)]
+    pub loader_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -159,6 +188,8 @@ mod tests {
             install_state: InstallState::Pending,
             created_at: Utc::now(),
             playit_tunnel_id: None,
+            launch: None,
+            pack: None,
         }
     }
 

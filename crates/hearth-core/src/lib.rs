@@ -4,6 +4,7 @@
 //! [`events::Event`]s to the web UI through an [`events::EventSink`].
 
 pub mod archive;
+pub mod content;
 pub mod error;
 pub mod events;
 pub mod games;
@@ -12,6 +13,7 @@ pub mod instance;
 pub mod java;
 pub mod manager;
 pub mod net;
+pub mod packs;
 pub mod paths;
 pub mod playit;
 pub mod players;

@@ -35,6 +35,42 @@ export interface Server {
   players: string[];
   protocol: Protocol;
   gameName: string;
+  launch: { kind: "jar"; jar: string } | { kind: "argsFile"; argsFile: string } | null;
+  pack: { name: string; version: string | null; file: string | null; loaderVersion: string | null } | null;
+  /** The server's mods/plugins folder, if it has one. */
+  content: { label: string; folder: string; extension: string } | null;
+}
+
+export interface PackInfo {
+  kind: "mrpack" | "serverPack";
+  game: string;
+  name: string;
+  packVersion: string | null;
+  minecraft: string | null;
+  loader: string | null;
+  loaderVersion: string | null;
+  modCount: number;
+  notes: string[];
+  warnings: string[];
+  needsInput: boolean;
+}
+
+export interface ImportPack {
+  file: string;
+  name: string;
+  port: number | null;
+  memoryMb: number | null;
+  acceptEula: boolean;
+  minecraft: string | null;
+  loader: string | null;
+}
+
+export interface ContentEntry {
+  file: string;
+  name: string;
+  version: string | null;
+  enabled: boolean;
+  size: number;
 }
 
 export interface GameInfo {
@@ -204,6 +240,13 @@ export const api = {
   consoleLines: (id: string) => call<LogLine[]>("console_lines", { id }),
   getProperties: (id: string) => call<[string, string][]>("get_properties", { id }),
   setProperties: (id: string, changes: Record<string, string>) => call<void>("set_properties", { id, changes }),
+  pickPackFile: () => call<string | null>("pick_pack_file"),
+  inspectPack: (path: string) => call<PackInfo>("inspect_pack", { path }),
+  importPack: (req: ImportPack) => call<Server>("import_pack", { req }),
+  listContent: (id: string) => call<ContentEntry[]>("list_content", { id }),
+  addContent: (id: string) => call<string[]>("add_content", { id }),
+  setContentEnabled: (id: string, file: string, enabled: boolean) => call<void>("set_content_enabled", { id, file, enabled }),
+  deleteContent: (id: string, file: string) => call<void>("delete_content", { id, file }),
   listPlayers: (id: string) => call<PlayersView>("list_players", { id }),
   playerAction: (id: string, name: string, action: PlayerAction) => call<void>("player_action", { id, name, action }),
   openFolder: (id: string) => call<void>("open_server_folder", { id }),

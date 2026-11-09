@@ -24,6 +24,8 @@ fn installed(root: &std::path::Path, id: &str, game: &str) {
         install_state: InstallState::Installed,
         created_at: Utc::now(),
         playit_tunnel_id: None,
+        launch: None,
+        pack: None,
     };
     InstanceStore::new(AppPaths::new(root)).save(&inst).unwrap();
     std::fs::create_dir_all(AppPaths::new(root).server_dir(id)).unwrap();

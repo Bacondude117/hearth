@@ -37,6 +37,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let root = app.path().app_data_dir()?;
             std::fs::create_dir_all(&root)?;
@@ -87,6 +88,13 @@ pub fn run() {
             commands::console_lines,
             commands::get_properties,
             commands::set_properties,
+            commands::pick_pack_file,
+            commands::inspect_pack,
+            commands::import_pack,
+            commands::list_content,
+            commands::add_content,
+            commands::set_content_enabled,
+            commands::delete_content,
             commands::list_players,
             commands::player_action,
             commands::open_server_folder,

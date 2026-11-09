@@ -62,6 +62,36 @@ pub fn extract_zip(zip_path: &Path, dest: &Path, opts: &ExtractOptions) -> Resul
     Ok(())
 }
 
+/// Extracts only the entries under top-level folder `prefix` (e.g. `overrides`), placing them
+/// directly in `dest`. Returns how many files were written.
+pub fn extract_zip_prefix(zip_path: &Path, prefix: &str, dest: &Path) -> Result<usize> {
+    let file = fs::File::open(zip_path).at(zip_path)?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| Error::Archive(e.to_string()))?;
+    let mut written = 0;
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).map_err(|e| Error::Archive(e.to_string()))?;
+        let Some(name) = entry.enclosed_name() else {
+            return Err(Error::Archive(format!("unsafe path in archive: {}", entry.name())));
+        };
+        let Ok(rel) = name.strip_prefix(prefix) else { continue };
+        if rel.as_os_str().is_empty() || !is_safe_relative(rel) {
+            continue;
+        }
+        let out = dest.join(rel);
+        if entry.is_dir() {
+            fs::create_dir_all(&out).at(&out)?;
+            continue;
+        }
+        if let Some(parent) = out.parent() {
+            fs::create_dir_all(parent).at(parent)?;
+        }
+        let mut f = fs::File::create(&out).at(&out)?;
+        io::copy(&mut entry, &mut f).at(&out)?;
+        written += 1;
+    }
+    Ok(written)
+}
+
 fn single_root(zip: &mut zip::ZipArchive<fs::File>) -> Result<Option<PathBuf>> {
     let mut root: Option<PathBuf> = None;
     for i in 0..zip.len() {
@@ -141,6 +171,19 @@ mod tests {
         extract_zip(&z, &out, &opts).unwrap();
         assert_eq!(fs::read_to_string(out.join("server.properties")).unwrap(), "mine");
         assert_eq!(fs::read_to_string(out.join("bedrock_server.exe")).unwrap(), "v2");
+    }
+
+    #[test]
+    fn extracts_only_a_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let z = tmp.path().join("p.zip");
+        make_zip(&z, &[("modrinth.index.json", "{}"), ("overrides/config/a.toml", "a"), ("server-overrides/config/a.toml", "b")]);
+        let out = tmp.path().join("out");
+        assert_eq!(extract_zip_prefix(&z, "overrides", &out).unwrap(), 1);
+        assert_eq!(fs::read_to_string(out.join("config/a.toml")).unwrap(), "a");
+        extract_zip_prefix(&z, "server-overrides", &out).unwrap();
+        assert_eq!(fs::read_to_string(out.join("config/a.toml")).unwrap(), "b");
+        assert!(!out.join("modrinth.index.json").exists());
     }
 
     #[test]

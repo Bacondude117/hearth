@@ -102,3 +102,144 @@ async fn install_start_stop(flavor: &str) {
     let props = m.properties(&id).unwrap();
     assert!(props.iter().any(|(k, v)| k == "motd" && v == "Live Test"));
 }
+
+async fn wait_installed(m: &ServerManager, id: &str) {
+    wait_for(
+        || {
+            let s = m.get(id).unwrap().instance.install_state;
+            if let InstallState::Failed { message } = &s {
+                panic!("install failed: {message}");
+            }
+            s == InstallState::Installed
+        },
+        900,
+        "install",
+    )
+    .await;
+}
+
+async fn boot_and_stop(m: &ServerManager, id: &str) {
+    m.start(id).await.unwrap();
+    wait_for(
+        || {
+            let s = m.get(id).unwrap().status;
+            if let ServerStatus::Crashed { .. } = s {
+                for l in m.console_lines(id) {
+                    println!("{}", l.text);
+                }
+                panic!("server crashed");
+            }
+            s == ServerStatus::Running
+        },
+        600,
+        "server ready",
+    )
+    .await;
+    m.stop(id).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn installs_and_boots_fabric() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let version = m.versions("minecraft-java", "fabric").await.unwrap()[0].id.clone();
+    let inst = m
+        .create(CreateServer {
+            name: "Fabric Live".into(),
+            game: "minecraft-java".into(),
+            flavor: "fabric".into(),
+            version,
+            port: None,
+            memory_mb: Some(1536),
+            accept_eula: true,
+        })
+        .unwrap();
+    wait_installed(&m, &inst.id).await;
+    let s = m.get(&inst.id).unwrap();
+    println!("installed {:?} launch {:?}", s.instance.installed_build, s.instance.launch);
+    let dir = m.server_dir(&inst.id).unwrap();
+    for e in std::fs::read_dir(&dir).unwrap().flatten() {
+        println!("  file: {} {}", e.file_name().to_string_lossy(), e.metadata().map(|m| m.len()).unwrap_or(0));
+    }
+    for l in m.console_lines(&inst.id) { println!("  log: {}", l.text); }
+    assert_eq!(s.content.map(|c| c.label), Some("Mods"));
+    boot_and_stop(&m, &inst.id).await;
+}
+
+/// Builds a real .mrpack (Fabric API from Modrinth, plus overrides) and imports it.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn imports_and_boots_mrpack() {
+    use std::io::Write;
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let mc = m.versions("minecraft-java", "fabric").await.unwrap()[0].id.clone();
+
+    let client = hearth_core::http::client();
+    let url = format!(
+        "https://api.modrinth.com/v2/project/fabric-api/version?loaders=%5B%22fabric%22%5D&game_versions=%5B%22{mc}%22%5D"
+    );
+    let versions: serde_json::Value = client.get(url).send().await.unwrap().json().await.unwrap();
+    let file = &versions[0]["files"][0];
+    let index = serde_json::json!({
+        "formatVersion": 1, "game": "minecraft", "versionId": "1.0.0", "name": "Live Test Pack",
+        "dependencies": { "minecraft": mc, "fabric-loader": serde_json::Value::Null },
+        "files": [
+            { "path": format!("mods/{}", file["filename"].as_str().unwrap()),
+              "hashes": { "sha512": file["hashes"]["sha512"], "sha1": file["hashes"]["sha1"] },
+              "env": { "client": "required", "server": "required" },
+              "downloads": [file["url"]], "fileSize": file["size"] },
+            { "path": "mods/client-only.jar", "hashes": { "sha512": "00" },
+              "env": { "client": "required", "server": "unsupported" },
+              "downloads": ["https://cdn.modrinth.com/data/nope/client-only.jar"], "fileSize": 1 }
+        ]
+    });
+    let mut index = index;
+    index["dependencies"].as_object_mut().unwrap().remove("fabric-loader");
+    index["dependencies"]["fabric-loader"] = serde_json::json!(
+        client.get("https://meta.fabricmc.net/v2/versions/loader").send().await.unwrap()
+            .json::<serde_json::Value>().await.unwrap()[0]["version"]
+    );
+
+    let pack = tmp.path().join("live.mrpack");
+    let mut w = zip::ZipWriter::new(std::fs::File::create(&pack).unwrap());
+    let opts = zip::write::SimpleFileOptions::default();
+    w.start_file("modrinth.index.json", opts).unwrap();
+    w.write_all(index.to_string().as_bytes()).unwrap();
+    w.start_file("overrides/config/hearth-test.txt", opts).unwrap();
+    w.write_all(b"shared").unwrap();
+    w.start_file("server-overrides/config/hearth-test.txt", opts).unwrap();
+    w.write_all(b"server").unwrap();
+    w.finish().unwrap();
+
+    let info = m.inspect_pack(&pack).unwrap();
+    println!("{info:?}");
+    assert_eq!(info.mod_count, 1);
+    assert!(!info.needs_input);
+
+    let inst = m
+        .import_pack(hearth_core::manager::ImportPack {
+            file: pack,
+            name: "Pack Live".into(),
+            port: None,
+            memory_mb: Some(1536),
+            accept_eula: true,
+            minecraft: None,
+            loader: None,
+        })
+        .unwrap();
+    wait_installed(&m, &inst.id).await;
+    let dir = m.server_dir(&inst.id).unwrap();
+    assert_eq!(std::fs::read_to_string(dir.join("config/hearth-test.txt")).unwrap(), "server");
+    assert!(!dir.join("mods/client-only.jar").exists());
+    let s = m.get(&inst.id).unwrap().instance;
+    assert!(s.pack.as_ref().unwrap().file.is_none(), "pack copy removed after install");
+    let mods = m.list_content(&inst.id).unwrap();
+    println!("mods: {mods:?}");
+    assert_eq!(mods.len(), 1);
+    assert_eq!(mods[0].name, "Fabric API");
+
+    boot_and_stop(&m, &inst.id).await;
+    assert!(m.console_lines(&inst.id).iter().any(|l| l.text.contains("fabric-api") || l.text.contains("Loading") ));
+}

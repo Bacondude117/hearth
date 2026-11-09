@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onCloseRequested, onEvent, type AppInfo, type GameInfo, type PlayitStatus, type Server } from "./api";
 import { Modal } from "./components/Modal";
+import { ImportPackDialog } from "./components/ImportPackDialog";
 import { NewServerDialog } from "./components/NewServerDialog";
 import { PlayitPage } from "./components/PlayitPage";
 import { ServerView } from "./components/ServerView";
@@ -16,6 +17,7 @@ export function App() {
   const [servers, setServers] = useState<Server[] | null>(null);
   const [view, setView] = useState<View>({ kind: "home" });
   const [newOpen, setNewOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [progress, setProgress] = useState<Record<string, { stage: string; fraction: number | null }>>({});
   const [playit, setPlayit] = useState<PlayitStatus | null>(null);
   const [closing, setClosing] = useState<number | null>(null);
@@ -97,6 +99,15 @@ export function App() {
     }
   }, [servers, view]);
 
+  const onCreated = (s: Server) => {
+    setNewOpen(false);
+    setImportOpen(false);
+    // Add it right away so the "selected server vanished" fallback doesn't kick in.
+    setServers((list) => (list?.some((x) => x.id === s.id) ? list : [...(list ?? []), s]));
+    setView({ kind: "server", id: s.id });
+    void refresh();
+  };
+
   const online = servers?.filter((s) => s.status.state === "running").length ?? 0;
 
   return (
@@ -176,13 +187,19 @@ export function App() {
         games={games}
         totalMemoryMb={info?.totalMemoryMb ?? null}
         onClose={() => setNewOpen(false)}
-        onCreated={(s) => {
+        onCreated={onCreated}
+        onImport={() => {
           setNewOpen(false);
-          // Add it right away so the "selected server vanished" fallback doesn't kick in.
-          setServers((list) => (list?.some((x) => x.id === s.id) ? list : [...(list ?? []), s]));
-          setView({ kind: "server", id: s.id });
-          void refresh();
+          setImportOpen(true);
         }}
+      />
+
+      <ImportPackDialog
+        open={importOpen}
+        game={games.find((g) => g.id === "minecraft-java")}
+        totalMemoryMb={info?.totalMemoryMb ?? null}
+        onClose={() => setImportOpen(false)}
+        onCreated={onCreated}
       />
 
       <Modal

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-11-09
+
+### Added
+- **Modded servers**: new Fabric, NeoForge and Forge server types. Pick a Minecraft version and Hearth installs the recommended loader build and the right Java.
+- **Import modpack**: create a server from a Modrinth `.mrpack` or a pack's server pack `.zip`. Hearth shows what it found (Minecraft version, loader, mod count) before creating anything, and asks when it can't tell.
+  - `.mrpack`: only server-side mods are downloaded (checksum-verified, from Modrinth's approved hosts), then the pack's overrides and server overrides are applied.
+  - Server packs: detects already-installed Forge/NeoForge, bundled installers, Fabric launchers, ServerPackCreator's `variables.txt`, or the mods themselves.
+- **Mods tab** (Plugins on Paper): add jars with a file picker, see each mod's name and version, turn mods on/off, delete them.
+
+### Changed
+- Fabric servers get the vanilla server jar downloaded and verified during install instead of on first start.
+- Servers created from a modpack can't change Minecraft version (it would break the mods).
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

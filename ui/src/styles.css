@@ -355,3 +355,20 @@ dialog.modal::backdrop { background: rgb(10 8 6 / 0.55); backdrop-filter: blur(2
 .tag.bad { background: var(--bad-soft); color: var(--bad); }
 .empty-players { text-align: center; padding: 32px; background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
 input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- modpacks & mods ------------------------------------------------------------------------ */
+.import-btn { margin-right: auto; }
+.pack-pick { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 24px 12px; }
+.pack-summary { background: var(--surface-2); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.pack-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.pack-summary dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 4px 0; }
+.pack-summary dt { color: var(--muted); }
+.pack-summary dd { margin: 0; font-weight: 600; }
+.pack-summary p { margin: 0; }
+.tag:not(.good):not(.bad) { background: var(--accent-soft); color: var(--accent); }
+.grow-text { flex-basis: 100%; margin: 0; }
+.content-tab { display: flex; flex-direction: column; gap: 14px; padding: 16px 2px 8px; }
+.mod-name { font-weight: 600; }
+.players-table tr.disabled-row td { opacity: 0.55; }
+.players-table tr.disabled-row td:nth-child(n+3) { opacity: 1; }
+.si-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

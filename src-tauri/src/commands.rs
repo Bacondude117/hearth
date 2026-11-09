@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use hearth_core::events::LogLine;
 use hearth_core::games::{GameInfo, GameVersion};
 use hearth_core::instance::Instance;
-use hearth_core::manager::{CreateServer, ServerSummary};
+use hearth_core::content::ContentEntry;
+use hearth_core::manager::{CreateServer, ImportPack, ServerSummary};
+use hearth_core::packs::PackInfo;
+use tauri_plugin_dialog::DialogExt;
 use hearth_core::playit::{PlayitStatus, TunnelInfo};
 use hearth_core::players::{PlayerAction, PlayersView};
 use serde::Serialize;
@@ -123,6 +126,63 @@ pub fn get_properties(state: State<'_, AppState>, id: String) -> R<Vec<(String, 
 #[tauri::command]
 pub fn set_properties(state: State<'_, AppState>, id: String, changes: HashMap<String, String>) -> R<()> {
     state.manager.set_properties(&id, changes).map_err(e)
+}
+
+/// Native "open file" dialog for a modpack. `None` if the user cancelled.
+#[tauri::command]
+pub async fn pick_pack_file(app: AppHandle) -> R<Option<String>> {
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Choose a modpack")
+        .add_filter("Modpacks (.mrpack, server pack .zip)", &["mrpack", "zip"])
+        .blocking_pick_file();
+    Ok(picked.and_then(|p| p.into_path().ok()).map(|p| p.display().to_string()))
+}
+
+#[tauri::command]
+pub async fn inspect_pack(state: State<'_, AppState>, path: String) -> R<PackInfo> {
+    let manager = state.manager.clone();
+    // Opening big zips is blocking work.
+    tauri::async_runtime::spawn_blocking(move || manager.inspect_pack(std::path::Path::new(&path)))
+        .await
+        .map_err(e)?
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn import_pack(state: State<'_, AppState>, req: ImportPack) -> R<ServerSummary> {
+    let inst = state.manager.import_pack(req).map_err(e)?;
+    state.manager.get(&inst.id).map_err(e)
+}
+
+#[tauri::command]
+pub fn list_content(state: State<'_, AppState>, id: String) -> R<Vec<ContentEntry>> {
+    state.manager.list_content(&id).map_err(e)
+}
+
+/// Opens a file picker for mod/plugin jars and copies the chosen files in.
+#[tauri::command]
+pub async fn add_content(app: AppHandle, state: State<'_, AppState>, id: String) -> R<Vec<String>> {
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Add mods or plugins")
+        .add_filter("Java archives (.jar)", &["jar"])
+        .blocking_pick_files();
+    let Some(files) = picked else { return Ok(vec![]) };
+    let paths: Vec<std::path::PathBuf> = files.into_iter().filter_map(|f| f.into_path().ok()).collect();
+    state.manager.add_content(&id, &paths).map_err(e)
+}
+
+#[tauri::command]
+pub fn set_content_enabled(state: State<'_, AppState>, id: String, file: String, enabled: bool) -> R<()> {
+    state.manager.set_content_enabled(&id, &file, enabled).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_content(state: State<'_, AppState>, id: String, file: String) -> R<()> {
+    state.manager.delete_content(&id, &file).map_err(e)
 }
 
 #[tauri::command]

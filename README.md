@@ -8,7 +8,8 @@ through [playit.gg](https://playit.gg), so friends can join without router setup
 
 ## Features
 
-- **Minecraft: Java Edition**: Paper (recommended) or Vanilla, any release version
+- **Minecraft: Java Edition**: Paper (recommended), Vanilla, or modded with **Fabric, NeoForge or Forge**
+- **Modpacks**: import a Modrinth `.mrpack` or a pack's server pack `.zip`, and manage mods/plugins from the **Mods** tab
 - **Minecraft: Bedrock Edition**: Mojang's official Bedrock Dedicated Server, with one-click updates that keep your worlds
 - **No Java install needed**: Hearth downloads the right Eclipse Temurin runtime for each Minecraft version
 - **Live console**: colored logs, command box with history, players online at a glance
@@ -49,7 +50,7 @@ runtimes\java-<N>\                    shared Java runtimes
 playit\                               playit.gg agent key and logs
 ```
 
-Use **Open folder** on a server to get to its files, for example to add Paper plugins to `plugins\`.
+Use **Open folder** on a server to get to its files. Mods and Paper plugins can be added from the **Mods** / **Plugins** tab.
 
 ## Development
 

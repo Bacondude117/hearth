@@ -3,13 +3,12 @@ import { api, isActive, onEvent, type AppInfo, type GameInfo, type PlayitStatus,
 import { copy, displayState, errorText, flavorLabel } from "../util";
 import { Console } from "./Console";
 import { SettingsTab } from "./SettingsTab";
+import { ContentTab } from "./ContentTab";
 import { PlayersTab } from "./PlayersTab";
 import { ShareTab } from "./ShareTab";
 import { useToast } from "./Toasts";
 
-type Tab = "console" | "players" | "settings" | "share";
-
-const TAB_LABEL: Record<Tab, string> = { console: "Console", players: "Players", settings: "Settings", share: "Share online" };
+type Tab = "console" | "players" | "content" | "settings" | "share";
 
 interface Props {
   server: Server;
@@ -30,6 +29,13 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
   const installing = server.installState.state === "installing" || server.installState.state === "pending";
   const active = isActive(server.status);
   const loader = useMemo(() => () => api.consoleLines(server.id), [server.id]);
+  const tabLabels: [Tab, string][] = [
+    ["console", "Console"],
+    ["players", "Players"],
+    ...(server.content ? ([["content", server.content.label]] as [Tab, string][]) : []),
+    ["settings", "Settings"],
+    ["share", "Share online"],
+  ];
   const tunnel = playit?.tunnels.find((t) => t.localPort === server.port && (t.protocol === server.protocol || t.protocol === "both"));
 
   useEffect(() => setTab("console"), [server.id]);
@@ -157,9 +163,9 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
       )}
 
       <nav className="tabs" role="tablist">
-        {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
+        {tabLabels.map(([t, label]) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "tab active" : "tab"} onClick={() => setTab(t)}>
-            {TAB_LABEL[t]}
+            {label}
           </button>
         ))}
         <span className="spacer" />
@@ -178,6 +184,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
           />
         )}
         {tab === "players" && <PlayersTab server={server} />}
+        {tab === "content" && server.content && <ContentTab server={server} />}
         {tab === "settings" && <SettingsTab server={server} game={game} info={info} onDeleted={onDeleted} />}
         {tab === "share" && <ShareTab server={server} game={game} playit={playit} onOpenPlayit={onOpenPlayit} />}
       </div>

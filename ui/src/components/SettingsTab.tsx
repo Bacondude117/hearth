@@ -193,12 +193,14 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
           <div>
             <strong>{server.game === "minecraft-bedrock" ? "Update to the latest Bedrock server" : "Change version"}</strong>
             <p className="muted">
-              {server.game === "minecraft-bedrock"
+              {server.pack
+                ? `This server came from the ${server.pack.name} modpack, so its Minecraft version is fixed. Changing it would break the mods.`
+                : server.game === "minecraft-bedrock"
                 ? "Bedrock players can only join a server on the same version as their game. Worlds and settings are kept."
                 : "Downloads a different server version. Worlds and settings are kept. Back up first: worlds can't be opened by older versions."}
             </p>
           </div>
-          <button className="btn" disabled={active || !installed} onClick={() => setUpdateOpen(true)}>
+          <button className="btn" disabled={active || !installed || !!server.pack} onClick={() => setUpdateOpen(true)}>
             {server.game === "minecraft-bedrock" ? "Update" : "Change…"}
           </button>
         </div>

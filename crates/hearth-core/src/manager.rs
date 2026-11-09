@@ -17,6 +17,9 @@ use crate::net::{self, Protocol};
 use crate::paths::AppPaths;
 use crate::playit::{Playit, TunnelInfo};
 use crate::players::{PlayerAction, PlayerBook, PlayersView};
+use crate::content::{self, ContentEntry, ContentFolder};
+use crate::instance::PackSource;
+use crate::packs::PackInfo;
 use crate::process::{Console, ServerProcess, ServerStatus};
 use crate::properties::Properties;
 
@@ -44,6 +47,21 @@ pub struct ServerSummary {
     pub players: Vec<String>,
     pub protocol: Protocol,
     pub game_name: String,
+    /// The server's mods/plugins folder, if it has one.
+    pub content: Option<ContentFolder>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPack {
+    pub file: PathBuf,
+    pub name: String,
+    pub port: Option<u16>,
+    pub memory_mb: Option<u32>,
+    pub accept_eula: bool,
+    /// Overrides for what inspection couldn't detect (or got wrong).
+    pub minecraft: Option<String>,
+    pub loader: Option<String>,
 }
 
 struct Slot {
@@ -132,18 +150,19 @@ impl ServerManager {
 
     fn summary(&self, inst: Instance) -> ServerSummary {
         let proc = self.process(&inst.id);
-        let (protocol, game_name) = match self.registry.get(&inst.game) {
+        let (protocol, game_name, content) = match self.registry.get(&inst.game) {
             Ok(p) => {
                 let i = p.info();
-                (i.protocol, i.name.to_owned())
+                (i.protocol, i.name.to_owned(), p.content_folder(&inst))
             }
-            Err(_) => (Protocol::Tcp, inst.game.clone()),
+            Err(_) => (Protocol::Tcp, inst.game.clone(), None),
         };
         ServerSummary {
             status: proc.as_ref().map(|p| p.status()).unwrap_or(ServerStatus::Stopped),
             players: proc.as_ref().map(|p| p.players()).unwrap_or_default(),
             protocol,
             game_name,
+            content,
             instance: inst,
         }
     }
@@ -204,6 +223,14 @@ impl ServerManager {
     }
 
     pub fn create(self: &Arc<Self>, req: CreateServer) -> Result<Instance> {
+        let inst = self.create_instance(req)?;
+        self.changed();
+        self.spawn_install(inst.id.clone(), true)?;
+        Ok(inst)
+    }
+
+    /// Validates and saves a new instance record (nothing is installed yet).
+    fn create_instance(&self, req: CreateServer) -> Result<Instance> {
         let provider = self.registry.get(&req.game)?;
         let info = provider.info();
         let name = req.name.trim();
@@ -251,10 +278,10 @@ impl ServerManager {
             install_state: InstallState::Pending,
             created_at: Utc::now(),
             playit_tunnel_id: None,
+            launch: None,
+            pack: None,
         };
         self.store.save(&inst)?;
-        self.changed();
-        self.spawn_install(inst.id.clone(), true)?;
         Ok(inst)
     }
 
@@ -275,11 +302,17 @@ impl ServerManager {
             return Err(Error::Conflict("Stop the server before updating it.".into()));
         }
         let mut inst = self.store.get(id)?;
-        if let Some(v) = version.filter(|v| !v.trim().is_empty()) {
+        if let Some(v) = version.filter(|v| !v.trim().is_empty() && v.trim() != inst.version) {
+            if inst.pack.is_some() {
+                return Err(Error::Conflict(
+                    "This server came from a modpack, so its Minecraft version can't be changed (the mods would break).".into(),
+                ));
+            }
             inst.version = v.trim().to_owned();
         }
         // A server that never finished installing has nothing to preserve.
-        let fresh = !self.paths.server_dir(id).join(provider_marker(&inst)).exists();
+        let pack_pending = inst.pack.as_ref().and_then(|p| p.file.as_ref()).is_some();
+        let fresh = pack_pending || !self.paths.server_dir(id).join(provider_marker(&inst)).exists();
         self.store.save(&inst)?;
         self.spawn_install(id.to_owned(), fresh)
     }
@@ -342,6 +375,15 @@ impl ServerManager {
         }
         if let Some(args) = outcome.jvm_args {
             inst.jvm_args = args;
+        }
+        if outcome.launch.is_some() {
+            inst.launch = outcome.launch;
+        }
+        // The pack's contents are in place; its copy is no longer needed for retries.
+        if let Some(pack) = inst.pack.as_mut() {
+            if let Some(f) = pack.file.take() {
+                let _ = tokio::fs::remove_file(self.paths.instance_dir(id).join(f)).await;
+            }
         }
         self.store.save(&inst)?;
         Ok(())
@@ -520,6 +562,114 @@ impl ServerManager {
         Ok(inst)
     }
 
+    // ---- modpacks -----------------------------------------------------------------------------
+
+    /// Reads a pack file and reports what it contains, without creating anything.
+    pub fn inspect_pack(&self, file: &std::path::Path) -> Result<PackInfo> {
+        if !file.is_file() {
+            return Err(Error::InvalidInput("That file doesn't exist anymore.".into()));
+        }
+        for info in self.registry.infos() {
+            if let Some(r) = self.registry.get(info.id)?.inspect_pack(file) {
+                return r;
+            }
+        }
+        Err(Error::InvalidInput("Hearth can import Modrinth .mrpack files and server pack .zip files.".into()))
+    }
+
+    /// Creates a server from a modpack and starts installing it.
+    pub fn import_pack(self: &Arc<Self>, req: ImportPack) -> Result<Instance> {
+        let info = self.inspect_pack(&req.file)?;
+        let flavor = req
+            .loader
+            .clone()
+            .or(info.loader.clone())
+            .ok_or_else(|| Error::InvalidInput("Choose the mod loader this pack uses.".into()))?;
+        let minecraft = req
+            .minecraft
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .or(info.minecraft.clone())
+            .ok_or_else(|| Error::InvalidInput("Choose the Minecraft version this pack is for.".into()))?;
+        // A pinned loader build only applies if the loader wasn't overridden.
+        let loader_version = if req.loader.as_ref().is_none_or(|l| Some(l) == info.loader.as_ref()) {
+            info.loader_version.clone()
+        } else {
+            None
+        };
+
+        let inst = self.create_instance(CreateServer {
+            name: req.name,
+            game: info.game.clone(),
+            flavor,
+            version: minecraft,
+            port: req.port,
+            memory_mb: req.memory_mb,
+            accept_eula: req.accept_eula,
+        })?;
+        // Keep a copy of the pack so a failed install can be retried.
+        let ext = req.file.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_else(|| "zip".into());
+        let stored = format!("pack.{ext}");
+        let dest = self.paths.instance_dir(&inst.id).join(&stored);
+        let copied = std::fs::copy(&req.file, &dest).map_err(|e| Error::Io { path: req.file.clone(), source: e });
+        if let Err(e) = copied {
+            let _ = self.store.delete(&inst.id);
+            return Err(e);
+        }
+        let mut inst = inst;
+        inst.pack = Some(PackSource { name: info.name, version: info.pack_version, file: Some(stored), loader_version });
+        self.store.save(&inst)?;
+        self.changed();
+        self.spawn_install(inst.id.clone(), true)?;
+        Ok(inst)
+    }
+
+    // ---- mods / plugins -----------------------------------------------------------------------
+
+    fn content_ctx(&self, id: &str) -> Result<(Arc<dyn GameProvider>, ContentFolder, PathBuf)> {
+        let inst = self.store.get(id)?;
+        let provider = self.registry.get(&inst.game)?;
+        let folder = provider
+            .content_folder(&inst)
+            .ok_or_else(|| Error::InvalidInput("This server type doesn't use mods or plugins.".into()))?;
+        Ok((provider, folder, self.paths.server_dir(id)))
+    }
+
+    pub fn list_content(&self, id: &str) -> Result<Vec<ContentEntry>> {
+        let (provider, folder, dir) = self.content_ctx(id)?;
+        content::list(&dir, &folder, |p| provider.describe_content(p))
+    }
+
+    pub fn add_content(&self, id: &str, files: &[PathBuf]) -> Result<Vec<String>> {
+        let (_, folder, dir) = self.content_ctx(id)?;
+        let added = content::add(&dir, &folder, files)?;
+        self.note_restart(id, &folder);
+        Ok(added)
+    }
+
+    pub fn set_content_enabled(&self, id: &str, file: &str, enabled: bool) -> Result<()> {
+        let (_, folder, dir) = self.content_ctx(id)?;
+        content::set_enabled(&dir, &folder, file, enabled)?;
+        self.note_restart(id, &folder);
+        Ok(())
+    }
+
+    pub fn delete_content(&self, id: &str, file: &str) -> Result<()> {
+        let (_, folder, dir) = self.content_ctx(id)?;
+        content::delete(&dir, &folder, file)?;
+        self.note_restart(id, &folder);
+        Ok(())
+    }
+
+    fn note_restart(&self, id: &str, folder: &ContentFolder) {
+        if self.is_active(id) {
+            self.console(id).push(
+                LogStream::System,
+                format!("{} changed. Restart the server to apply.", folder.label),
+            );
+        }
+    }
+
     // ---- players ------------------------------------------------------------------------------
 
     fn player_book(&self, id: &str) -> PlayerBook {
@@ -640,7 +790,8 @@ impl ServerManager {
 /// A file whose presence means the server binaries were installed before.
 fn provider_marker(inst: &Instance) -> &'static str {
     match inst.game.as_str() {
-        "minecraft-java" => "server.jar",
+        // Written at the end of every successful Java install.
+        "minecraft-java" => "eula.txt",
         _ => "server.properties",
     }
 }

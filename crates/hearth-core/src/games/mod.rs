@@ -3,6 +3,9 @@
 
 pub mod bedrock_players;
 pub mod java_players;
+pub mod mc_content;
+pub mod mc_loaders;
+pub mod mc_packs;
 pub mod minecraft_bedrock;
 pub mod minecraft_java;
 
@@ -18,6 +21,9 @@ use crate::instance::Instance;
 use crate::java::JavaRuntimes;
 use crate::net::Protocol;
 use crate::paths::AppPaths;
+use crate::content::ContentFolder;
+use crate::instance::JavaLaunch;
+use crate::packs::PackInfo;
 use crate::players::PlayerAdmin;
 
 /// Shared services a provider may use.
@@ -72,6 +78,7 @@ pub struct InstallOutcome {
     pub installed_build: Option<String>,
     pub java_major: Option<u32>,
     pub jvm_args: Option<Vec<String>>,
+    pub launch: Option<JavaLaunch>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +146,21 @@ pub trait GameProvider: Send + Sync {
     /// A player's name and account id when a log line reveals them (recorded so files keyed
     /// by id can be edited later).
     fn parse_identity(&self, _line: &str) -> Option<(String, Option<String>)> {
+        None
+    }
+
+    /// `Some` when `file` is a modpack this game can import.
+    fn inspect_pack(&self, _file: &Path) -> Option<Result<PackInfo>> {
+        None
+    }
+
+    /// The add-on folder (mods/plugins) for this server, if it has one.
+    fn content_folder(&self, _inst: &Instance) -> Option<ContentFolder> {
+        None
+    }
+
+    /// Display name and version of an add-on file.
+    fn describe_content(&self, _file: &Path) -> Option<(String, Option<String>)> {
         None
     }
 }

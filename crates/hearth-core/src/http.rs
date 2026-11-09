@@ -42,12 +42,14 @@ pub(crate) fn host_of(url: &str) -> String {
 pub enum Checksum {
     Sha1(String),
     Sha256(String),
+    Sha512(String),
     None,
 }
 
 enum Hasher {
     Sha1(sha1::Sha1),
     Sha256(sha2::Sha256),
+    Sha512(sha2::Sha512),
     None,
 }
 
@@ -56,6 +58,7 @@ impl Hasher {
         match c {
             Checksum::Sha1(_) => Hasher::Sha1(sha1::Sha1::new()),
             Checksum::Sha256(_) => Hasher::Sha256(sha2::Sha256::new()),
+            Checksum::Sha512(_) => Hasher::Sha512(sha2::Sha512::new()),
             Checksum::None => Hasher::None,
         }
     }
@@ -63,6 +66,7 @@ impl Hasher {
         match self {
             Hasher::Sha1(h) => h.update(data),
             Hasher::Sha256(h) => h.update(data),
+            Hasher::Sha512(h) => h.update(data),
             Hasher::None => {}
         }
     }
@@ -70,6 +74,7 @@ impl Hasher {
         match self {
             Hasher::Sha1(h) => Some(hex::encode(h.finalize())),
             Hasher::Sha256(h) => Some(hex::encode(h.finalize())),
+            Hasher::Sha512(h) => Some(hex::encode(h.finalize())),
             Hasher::None => None,
         }
     }
@@ -121,7 +126,7 @@ pub async fn download(
     drop(file);
 
     let expected = match checksum {
-        Checksum::Sha1(h) | Checksum::Sha256(h) => Some(h.to_ascii_lowercase()),
+        Checksum::Sha1(h) | Checksum::Sha256(h) | Checksum::Sha512(h) => Some(h.to_ascii_lowercase()),
         Checksum::None => None,
     };
     if let (Some(expected), Some(actual)) = (expected, hasher.finish()) {

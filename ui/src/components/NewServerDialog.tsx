@@ -9,9 +9,10 @@ interface Props {
   totalMemoryMb: number | null;
   onClose: () => void;
   onCreated: (s: Server) => void;
+  onImport: () => void;
 }
 
-export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated }: Props) {
+export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated, onImport }: Props) {
   const [gameId, setGameId] = useState("minecraft-java");
   const game = games.find((g) => g.id === gameId) ?? games[0];
   const [flavor, setFlavor] = useState("paper");
@@ -106,6 +107,9 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
       locked={busy}
       footer={
         <>
+          <button className="btn ghost import-btn" type="button" onClick={onImport} disabled={busy}>
+            📦 Import modpack…
+          </button>
           <button className="btn ghost" type="button" onClick={onClose} disabled={busy}>
             Cancel
           </button>

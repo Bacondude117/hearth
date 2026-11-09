@@ -1,7 +1,10 @@
 // In-browser stand-in for the Rust backend, used only when the UI runs outside Tauri
 // (e.g. `npm run dev` in a normal browser). It simulates installs, starts and logs.
 
-import type { GameInfo, HearthEvent, LogLine, PlayitStatus, Server, ServerStatus } from "./api";
+import type { ContentEntry, GameInfo, HearthEvent, LogLine, PackInfo, PlayitStatus, Server, ServerStatus } from "./api";
+
+const PLUGINS = { label: "Plugins", folder: "plugins", extension: "jar" };
+const MODS = { label: "Mods", folder: "mods", extension: "jar" };
 
 const games: GameInfo[] = [
   {
@@ -11,6 +14,9 @@ const games: GameInfo[] = [
     flavors: [
       { id: "paper", name: "Paper", description: "Faster than vanilla and supports Bukkit/Paper plugins. Recommended." },
       { id: "vanilla", name: "Vanilla", description: "Mojang's official server, unmodified." },
+      { id: "fabric", name: "Fabric", description: "Lightweight mod loader. Most performance and utility mods." },
+      { id: "neoforge", name: "NeoForge", description: "Mod loader for big content mods on newer versions." },
+      { id: "forge", name: "Forge", description: "The classic mod loader. Needed for many older modpacks." },
     ],
     defaultPort: 25565,
     protocol: "tcp",
@@ -47,20 +53,50 @@ const servers: Server[] = [
     installedBuild: "build 245", port: 25565, memoryMb: 4096, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: "t1",
     status: { state: "running" }, players: ["Alex", "Steve_2", "Notch"], protocol: "tcp", gameName: games[0].name,
+    launch: { kind: "jar", jar: "server.jar" }, pack: null, content: PLUGINS,
+  },
+  {
+    id: "cobblemon-7a8b", name: "Cobblemon", game: "minecraft-java", flavor: "fabric", version: "1.21.1",
+    installedBuild: "Fabric 0.20.1", port: 25567, memoryMb: 6144, javaMajor: 21, jvmArgs: [],
+    installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
+    status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
+    launch: { kind: "jar", jar: "fabric-server-launch.jar" },
+    pack: { name: "Cobblemon Official Modpack [Fabric]", version: "1.8.4", file: null, loaderVersion: "0.20.1" }, content: MODS,
   },
   {
     id: "creative-3c4d", name: "Creative build", game: "minecraft-java", flavor: "vanilla", version: "26.3",
     installedBuild: null, port: 25566, memoryMb: 2048, javaMajor: 25, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "tcp", gameName: games[0].name,
+    launch: null, pack: null, content: null,
   },
   {
     id: "bedrock-5e6f", name: "Family Bedrock", game: "minecraft-bedrock", flavor: "bedrock", version: "latest",
     installedBuild: "1.26.63.1", port: 19132, memoryMb: null, javaMajor: null, jvmArgs: [],
     installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
     status: { state: "stopped" }, players: [], protocol: "udp", gameName: games[1].name,
+    launch: null, pack: null, content: null,
   },
 ];
+
+const contentStore = new Map<string, ContentEntry[]>([
+  ["cobblemon-7a8b", [
+    { file: "Cobblemon-fabric-1.6.1+1.21.1.jar", name: "Cobblemon", version: "1.6.1+1.21.1", enabled: true, size: 48_234_112 },
+    { file: "fabric-api-0.116.6+1.21.1.jar", name: "Fabric API", version: "0.116.6+1.21.1", enabled: true, size: 2_412_331 },
+    { file: "lithium-fabric-0.15.1+mc1.21.1.jar", name: "Lithium", version: "0.15.1+mc1.21.1", enabled: true, size: 812_004 },
+    { file: "ferritecore-7.0.2-fabric.jar", name: "FerriteCore", version: "7.0.2", enabled: true, size: 121_830 },
+    { file: "spark-1.10.119-fabric.jar.disabled", name: "spark", version: "1.10.119", enabled: false, size: 3_101_220 },
+  ]],
+  ["survival-1a2b", [
+    { file: "EssentialsX-2.21.0.jar", name: "EssentialsX", version: "2.21.0", enabled: true, size: 3_512_004 },
+    { file: "LuckPerms-Bukkit-5.5.0.jar", name: "LuckPerms", version: "5.5.0", enabled: true, size: 1_934_002 },
+  ]],
+]);
+const mockPack: PackInfo = {
+  kind: "mrpack", game: "minecraft-java", name: "Cobblemon Official Modpack [Fabric]", packVersion: "1.8.4",
+  minecraft: "1.21.1", loader: "fabric", loaderVersion: "0.20.1", modCount: 36,
+  notes: ["41 client-only files will be skipped."], warnings: [], needsInput: false,
+};
 
 const consoles = new Map<string, LogLine[]>();
 const seqs = new Map<string, number>();
@@ -166,7 +202,9 @@ const handlers: Record<string, (a: any) => unknown> = {
   app_info: () => ({ version: "0.1.0-dev", dataDir: "C:\\Users\\you\\AppData\\Roaming\\app.hearth.desktop", totalMemoryMb: 16384, playitSupported: true }),
   games: () => games,
   versions: ({ game, flavor }) =>
-    game === "minecraft-bedrock"
+    ["fabric", "forge", "neoforge"].includes(flavor)
+      ? ["26.3", "26.2", "26.1.2", "1.21.1", "1.20.1"].map((v) => ({ id: v, label: v, stable: true }))
+      : game === "minecraft-bedrock"
       ? [{ id: "latest", label: "Latest (1.26.63.1)", stable: true }]
       : flavor === "paper"
         ? [
@@ -188,6 +226,8 @@ const handlers: Record<string, (a: any) => unknown> = {
       port: req.port ?? g.defaultPort, memoryMb: req.memoryMb, javaMajor: null, jvmArgs: [],
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
+      launch: null, pack: null,
+      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : null,
     };
     servers.push(s);
     void install(s);
@@ -264,6 +304,31 @@ const handlers: Record<string, (a: any) => unknown> = {
     }
     if (s.status.state === "running") log(id, `> ${action.type} ${name}`, "system");
   },
+  pick_pack_file: () => "C:\\Users\\you\\Downloads\\Cobblemon Official Modpack [Fabric] 1.8.4.mrpack",
+  inspect_pack: async () => {
+    await sleep(600);
+    return mockPack;
+  },
+  import_pack: ({ req }) => {
+    const s = handlers.create_server({ req: { ...req, game: "minecraft-java", flavor: req.loader ?? mockPack.loader, version: req.minecraft ?? mockPack.minecraft } }) as Server;
+    s.pack = { name: mockPack.name, version: mockPack.packVersion, file: "pack.mrpack", loaderVersion: mockPack.loaderVersion };
+    return s;
+  },
+  list_content: ({ id }) => contentStore.get(id) ?? [],
+  add_content: ({ id }) => {
+    const list = contentStore.get(id) ?? [];
+    contentStore.set(id, list);
+    list.push({ file: "jei-1.21.1-fabric-19.21.0.jar", name: "Just Enough Items", version: "19.21.0", enabled: true, size: 1_204_331 });
+    return ["jei-1.21.1-fabric-19.21.0.jar"];
+  },
+  set_content_enabled: ({ id, file, enabled }) => {
+    const m = (contentStore.get(id) ?? []).find((x) => x.file === file);
+    if (m) {
+      m.enabled = enabled;
+      m.file = enabled ? m.file.replace(/\.disabled$/, "") : `${m.file}.disabled`;
+    }
+  },
+  delete_content: ({ id, file }) => contentStore.set(id, (contentStore.get(id) ?? []).filter((x) => x.file !== file)),
   open_server_folder: () => undefined,
   open_link: ({ url }) => window.open(url, "_blank"),
   share_info: ({ id }) => tunnels.find((x) => x.localPort === find(id).port) ?? null,

@@ -152,7 +152,7 @@ impl GameProvider for MinecraftBedrock {
             self.apply_port(server_dir, inst.port)?;
         }
 
-        Ok(InstallOutcome { installed_build: version, java_major: None, jvm_args: None })
+        Ok(InstallOutcome { installed_build: version, java_major: None, jvm_args: None, launch: None })
     }
 
     fn launch(&self, _ctx: &GameContext, _inst: &Instance, server_dir: &Path) -> Result<LaunchSpec> {

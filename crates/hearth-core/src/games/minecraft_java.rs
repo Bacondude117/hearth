@@ -6,13 +6,17 @@ use std::path::Path;
 use async_trait::async_trait;
 use serde::Deserialize;
 
+use super::mc_loaders::{self, Loader};
+use super::mc_packs;
 use super::{
     compare_versions, Eula, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome,
     LaunchSpec, LineEvent, Progress,
 };
 use crate::error::{Error, IoContext, Result};
 use crate::http::{self, Checksum};
-use crate::instance::Instance;
+use crate::content::ContentFolder;
+use crate::instance::{Instance, JavaLaunch};
+use crate::packs::PackInfo;
 use crate::net::Protocol;
 use crate::properties::Properties;
 
@@ -145,6 +149,9 @@ impl GameProvider for MinecraftJava {
                     description: "Faster than vanilla and supports Bukkit/Paper plugins. Recommended.",
                 },
                 FlavorInfo { id: "vanilla", name: "Vanilla", description: "Mojang's official server, unmodified." },
+                FlavorInfo { id: "fabric", name: "Fabric", description: "Lightweight mod loader. Most performance and utility mods." },
+                FlavorInfo { id: "neoforge", name: "NeoForge", description: "Mod loader for big content mods on newer versions." },
+                FlavorInfo { id: "forge", name: "Forge", description: "The classic mod loader. Needed for many older modpacks." },
             ],
             default_port: 25565,
             protocol: Protocol::Tcp,
@@ -161,7 +168,10 @@ impl GameProvider for MinecraftJava {
         match flavor {
             "vanilla" => Ok(vanilla_versions(&http::get_json(&ctx.client, MOJANG_MANIFEST).await?)),
             "paper" => Ok(paper_versions(&http::get_json(&ctx.client, PAPER_API).await?)),
-            other => Err(Error::InvalidInput(format!("Unknown Minecraft Java flavor: {other}"))),
+            other => match Loader::from_flavor(other) {
+                Some(l) => mc_loaders::loader_versions(&ctx.client, l).await,
+                None => Err(Error::InvalidInput(format!("Unknown Minecraft Java flavor: {other}"))),
+            },
         }
     }
 
@@ -174,6 +184,9 @@ impl GameProvider for MinecraftJava {
         progress: Progress<'_>,
     ) -> Result<InstallOutcome> {
         tokio::fs::create_dir_all(server_dir).await.at(server_dir)?;
+        if let Some(loader) = Loader::from_flavor(&inst.flavor) {
+            return install_modded(ctx, inst, server_dir, fresh, loader, progress).await;
+        }
         let jar = server_dir.join(JAR);
 
         progress("Looking up server version", None);
@@ -213,24 +226,12 @@ impl GameProvider for MinecraftJava {
 
         http::download(&ctx.client, &url, &jar, &checksum, |f| progress("Downloading server", f)).await?;
 
-        // The installer only runs after the user accepted the EULA in the UI.
-        let eula = server_dir.join("eula.txt");
-        tokio::fs::write(&eula, "# Accepted in Hearth (https://aka.ms/MinecraftEULA)\neula=true\n")
-            .await
-            .at(&eula)?;
-
-        if fresh {
-            let path = server_dir.join("server.properties");
-            let mut props = Properties::load(&path)?;
-            props.set("server-port", inst.port.to_string());
-            props.set("motd", inst.name.clone());
-            props.save(&path)?;
-        }
-
+        finish_setup(inst, server_dir, fresh).await?;
         Ok(InstallOutcome {
             installed_build: build,
             java_major: Some(java_major),
             jvm_args: Some(jvm_args),
+            launch: Some(JavaLaunch::Jar { jar: JAR.into() }),
         })
     }
 
@@ -242,11 +243,7 @@ impl GameProvider for MinecraftJava {
             .java
             .installed(major)
             .ok_or_else(|| Error::InvalidInput(format!("Java {major} is missing. Try reinstalling the server.")))?;
-        let mem = inst.memory_mb.unwrap_or(DEFAULT_MEMORY_MB);
-        let mut args = vec![format!("-Xms{mem}M"), format!("-Xmx{mem}M")];
-        args.extend(inst.jvm_args.iter().cloned());
-        args.extend(["-jar".into(), JAR.into(), "nogui".into()]);
-        Ok(LaunchSpec { program: java, args, cwd: server_dir.to_path_buf(), env: vec![] })
+        Ok(LaunchSpec { program: java, args: java_args(inst, server_dir), cwd: server_dir.to_path_buf(), env: vec![] })
     }
 
     fn parse_line(&self, line: &str) -> Option<LineEvent> {
@@ -264,6 +261,23 @@ impl GameProvider for MinecraftJava {
         Some(&super::java_players::JavaPlayers)
     }
 
+    fn inspect_pack(&self, file: &Path) -> Option<Result<PackInfo>> {
+        let ext = file.extension()?.to_string_lossy().to_lowercase();
+        matches!(ext.as_str(), "mrpack" | "zip").then(|| mc_packs::inspect(file))
+    }
+
+    fn content_folder(&self, inst: &Instance) -> Option<ContentFolder> {
+        match inst.flavor.as_str() {
+            "paper" => Some(ContentFolder { label: "Plugins", folder: "plugins", extension: "jar" }),
+            f if Loader::from_flavor(f).is_some() => Some(ContentFolder { label: "Mods", folder: "mods", extension: "jar" }),
+            _ => None,
+        }
+    }
+
+    fn describe_content(&self, file: &Path) -> Option<(String, Option<String>)> {
+        super::mc_content::describe_jar(file)
+    }
+
     fn parse_identity(&self, line: &str) -> Option<(String, Option<String>)> {
         // "[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-..."
         let msg = line.split_once("]: ").map(|(_, m)| m).unwrap_or(line).trim_end();
@@ -271,6 +285,139 @@ impl GameProvider for MinecraftJava {
         (super::java_players::valid_name(name) && uuid::Uuid::parse_str(uuid).is_ok())
             .then(|| (name.to_owned(), Some(uuid.to_owned())))
     }
+}
+
+/// JVM arguments for any Java-edition server. Hearth's memory flags come after the pack's own
+/// `user_jvm_args.txt` so they take precedence.
+pub(crate) fn java_args(inst: &Instance, server_dir: &Path) -> Vec<String> {
+    let mem = inst.memory_mb.unwrap_or(DEFAULT_MEMORY_MB);
+    let mut args = vec![];
+    let launch = inst.launch.clone().unwrap_or(JavaLaunch::Jar { jar: JAR.into() });
+    if matches!(launch, JavaLaunch::ArgsFile { .. }) && server_dir.join("user_jvm_args.txt").exists() {
+        args.push("@user_jvm_args.txt".to_owned());
+    }
+    args.extend([format!("-Xms{mem}M"), format!("-Xmx{mem}M")]);
+    args.extend(inst.jvm_args.iter().cloned());
+    match launch {
+        JavaLaunch::Jar { jar } => args.extend(["-jar".into(), jar]),
+        JavaLaunch::ArgsFile { args_file } => args.push(format!("@{args_file}")),
+    }
+    args.push("nogui".into());
+    args
+}
+
+/// EULA, and on a fresh install the port and MOTD (keeping a pack's own MOTD).
+async fn finish_setup(inst: &Instance, server_dir: &Path, fresh: bool) -> Result<()> {
+    // The installer only runs after the user accepted the EULA in the UI.
+    let eula = server_dir.join("eula.txt");
+    tokio::fs::write(&eula, "# Accepted in Hearth (https://aka.ms/MinecraftEULA)\neula=true\n")
+        .await
+        .at(&eula)?;
+    if fresh {
+        let path = server_dir.join("server.properties");
+        let mut props = Properties::load(&path)?;
+        props.set("server-port", inst.port.to_string());
+        if props.get("motd").is_none_or(|m| m.is_empty() || m == "A Minecraft Server") {
+            props.set("motd", inst.name.clone());
+        }
+        props.save(&path)?;
+    }
+    Ok(())
+}
+
+/// Fabric / Forge / NeoForge: unpack the modpack (if any), install Java and the loader.
+async fn install_modded(
+    ctx: &GameContext,
+    inst: &Instance,
+    dir: &Path,
+    fresh: bool,
+    loader: Loader,
+    progress: Progress<'_>,
+) -> Result<InstallOutcome> {
+    let pack_file = inst
+        .pack
+        .as_ref()
+        .and_then(|p| p.file.as_ref())
+        .map(|f| ctx.paths.instance_dir(&inst.id).join(f))
+        .filter(|p| p.exists());
+    let pinned = inst.pack.as_ref().and_then(|p| p.loader_version.clone());
+
+    if let Some(file) = &pack_file {
+        mc_packs::unpack(ctx, file, dir, progress).await?;
+    } else if !fresh && inst.pack.is_none() {
+        // Version change on a plain modded server: start the loader install clean.
+        mc_loaders::clear_loader_files(dir, loader);
+    }
+
+    progress("Looking up Minecraft version", None);
+    let detail = vanilla_detail(ctx, &inst.version).await?;
+    let major = detail.java_version.as_ref().map(|j| j.major).unwrap_or(8);
+    let java = ctx.java.ensure(major, |stage, f| progress(stage, f)).await?;
+
+    let (launch, build) = match loader {
+        Loader::Fabric => match mc_loaders::find_fabric_launcher(dir) {
+            Some(jar) => {
+                let v = mc_loaders::parse_fabric_launcher_name(&jar).map(|(_, l)| l).or(pinned);
+                (JavaLaunch::Jar { jar }, v)
+            }
+            None => {
+                let v = mc_loaders::install_fabric(&ctx.client, &inst.version, pinned.as_deref(), dir, progress).await?;
+                (JavaLaunch::Jar { jar: mc_loaders::FABRIC_LAUNCHER.into() }, Some(v))
+            }
+        },
+        Loader::Forge | Loader::NeoForge => {
+            let mut version = pinned.clone();
+            if mc_loaders::find_args_file(dir).is_none() {
+                let installer = match mc_loaders::find_installer_jar(dir) {
+                    Some(p) => p,
+                    None => {
+                        let (p, v) =
+                            mc_loaders::download_installer(&ctx.client, loader, &inst.version, pinned.as_deref(), dir, progress)
+                                .await?;
+                        version = Some(v);
+                        p
+                    }
+                };
+                mc_loaders::run_installer(&java, &installer, dir, loader, progress).await?;
+                let _ = tokio::fs::remove_file(&installer).await;
+                let _ = tokio::fs::remove_file(dir.join(format!("{}.log", installer.display()))).await;
+            }
+            let args_file = mc_loaders::find_args_file(dir).ok_or_else(|| {
+                Error::InvalidInput(format!(
+                    "The {} install finished but its start files are missing. Try reinstalling.",
+                    loader.display()
+                ))
+            })?;
+            let v = mc_loaders::parse_args_path(&args_file).map(|(_, _, v)| v).or(version);
+            (JavaLaunch::ArgsFile { args_file }, v)
+        }
+    };
+
+    if loader == Loader::Fabric {
+        // Fabric's launcher would otherwise fetch the vanilla jar on first start, without
+        // progress. It looks for `.fabric/server/<mc>-server.jar` (see fabric-installer's
+        // ServerLauncher), so put a checksum-verified copy there now.
+        if let Some(server) = detail.downloads.get("server") {
+            let jar = dir.join(".fabric/server").join(format!("{}-server.jar", inst.version));
+            if !jar.exists() {
+                http::download(&ctx.client, &server.url, &jar, &Checksum::Sha1(server.sha1.clone()), |f| {
+                    progress("Downloading Minecraft server", f)
+                })
+                .await?;
+            }
+        }
+    }
+
+    finish_setup(inst, dir, fresh).await?;
+    Ok(InstallOutcome {
+        installed_build: Some(match build {
+            Some(v) => format!("{} {v}", loader.display()),
+            None => loader.display().to_owned(),
+        }),
+        java_major: Some(major),
+        jvm_args: Some(vec![]),
+        launch: Some(launch),
+    })
 }
 
 async fn vanilla_detail(ctx: &GameContext, version: &str) -> Result<VersionDetail> {
