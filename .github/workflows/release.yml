@@ -30,6 +30,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
+      - name: Cache Tauri bundler tools (NSIS, WiX)
+        uses: actions/cache@v4
+        with:
+          # bundle.useLocalToolsDir in tauri.conf.json keeps the tools here.
+          path: target/.tauri
+          key: tauri-bundler-tools-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: tauri-bundler-tools-${{ runner.os }}-
       - name: Release notes from CHANGELOG.md
         id: notes
         shell: bash

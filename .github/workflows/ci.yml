@@ -36,8 +36,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: cargo test -p hearth-core
+      - name: Cache Tauri bundler tools (NSIS, WiX)
+        uses: actions/cache@v4
+        with:
+          # bundle.useLocalToolsDir in tauri.conf.json keeps the tools here.
+          path: target/.tauri
+          key: tauri-bundler-tools-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: tauri-bundler-tools-${{ runner.os }}-
       - name: Build installer
-        run: npx tauri build
+        # Tauri downloads NSIS/WiX from GitHub on a cold cache, which sometimes times out (504).
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            npx tauri build && exit 0
+            echo "::warning::tauri build failed (attempt $attempt), retrying in 30s"
+            sleep 30
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: hearth-windows-installers
