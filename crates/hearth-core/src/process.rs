@@ -1,0 +1,327 @@
+//! Running one server process: spawn, stream logs, send commands, stop gracefully.
+
+use std::collections::{BTreeSet, VecDeque};
+use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use serde::Serialize;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::process::{ChildStdin, Command};
+use tokio::sync::{oneshot, watch};
+
+use crate::error::{Error, Result};
+use crate::events::{Event, EventSink, LogLine, LogStream};
+use crate::games::{LaunchSpec, LineEvent};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum ServerStatus {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+    Crashed { code: Option<i32> },
+}
+
+impl ServerStatus {
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Starting | Self::Running | Self::Stopping)
+    }
+}
+
+pub const CONSOLE_CAPACITY: usize = 2000;
+
+/// Per-server console history. Outlives individual processes so a crash log stays visible.
+pub struct Console {
+    instance_id: String,
+    lines: Mutex<(u64, VecDeque<LogLine>)>,
+    sink: Arc<dyn EventSink>,
+}
+
+impl Console {
+    pub fn new(instance_id: String, sink: Arc<dyn EventSink>) -> Self {
+        Self { instance_id, lines: Mutex::new((0, VecDeque::new())), sink }
+    }
+
+    pub fn push(&self, stream: LogStream, text: impl Into<String>) {
+        let line = {
+            let mut g = self.lines.lock().unwrap();
+            g.0 += 1;
+            let line = LogLine { seq: g.0, text: text.into(), stream };
+            if g.1.len() >= CONSOLE_CAPACITY {
+                g.1.pop_front();
+            }
+            g.1.push_back(line.clone());
+            line
+        };
+        self.sink.emit(Event::ServerLog { instance_id: self.instance_id.clone(), line });
+    }
+
+    pub fn snapshot(&self) -> Vec<LogLine> {
+        self.lines.lock().unwrap().1.iter().cloned().collect()
+    }
+}
+
+pub type LineParser = Arc<dyn Fn(&str) -> Option<LineEvent> + Send + Sync>;
+
+pub struct ServerProcess {
+    instance_id: String,
+    status: Mutex<ServerStatus>,
+    players: Mutex<BTreeSet<String>>,
+    stdin: tokio::sync::Mutex<Option<ChildStdin>>,
+    stop_requested: AtomicBool,
+    kill_tx: Mutex<Option<oneshot::Sender<()>>>,
+    exited: watch::Receiver<bool>,
+    console: Arc<Console>,
+    sink: Arc<dyn EventSink>,
+    stop_command: String,
+}
+
+impl ServerProcess {
+    pub fn spawn(
+        instance_id: String,
+        spec: &LaunchSpec,
+        parser: LineParser,
+        stop_command: &str,
+        console: Arc<Console>,
+        sink: Arc<dyn EventSink>,
+    ) -> Result<Arc<Self>> {
+        let mut cmd = Command::new(&spec.program);
+        cmd.args(&spec.args)
+            .current_dir(&spec.cwd)
+            .envs(spec.env.iter().cloned())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        console.push(LogStream::System, format!("Starting {}", spec.program.display()));
+        let mut child = cmd.spawn().map_err(|e| {
+            Error::InvalidInput(format!("Could not start the server ({}): {e}", spec.program.display()))
+        })?;
+        crate::winjob::adopt(&child);
+
+        let stdout = child.stdout.take().expect("piped");
+        let stderr = child.stderr.take().expect("piped");
+        let stdin = child.stdin.take();
+        let (kill_tx, kill_rx) = oneshot::channel();
+        let (exit_tx, exit_rx) = watch::channel(false);
+
+        let proc = Arc::new(Self {
+            instance_id,
+            status: Mutex::new(ServerStatus::Starting),
+            players: Mutex::new(BTreeSet::new()),
+            stdin: tokio::sync::Mutex::new(stdin),
+            stop_requested: AtomicBool::new(false),
+            kill_tx: Mutex::new(Some(kill_tx)),
+            exited: exit_rx,
+            console,
+            sink,
+            stop_command: stop_command.to_owned(),
+        });
+        proc.emit_status();
+
+        let out_task = tokio::spawn(Self::pump(proc.clone(), stdout, LogStream::Stdout, Some(parser)));
+        let err_task = tokio::spawn(Self::pump(proc.clone(), stderr, LogStream::Stderr, None));
+
+        let p = proc.clone();
+        tokio::spawn(async move {
+            let status = tokio::select! {
+                s = child.wait() => s,
+                _ = kill_rx => {
+                    let _ = child.start_kill();
+                    child.wait().await
+                }
+            };
+            // Drain remaining output so the last lines (often the crash reason) are kept.
+            let _ = tokio::time::timeout(Duration::from_secs(2), async {
+                let _ = out_task.await;
+                let _ = err_task.await;
+            })
+            .await;
+
+            let code = status.ok().and_then(|s| s.code());
+            let requested = p.stop_requested.load(Ordering::SeqCst);
+            let final_status =
+                if requested || code == Some(0) { ServerStatus::Stopped } else { ServerStatus::Crashed { code } };
+            p.console.push(
+                LogStream::System,
+                match &final_status {
+                    ServerStatus::Crashed { code: Some(c) } => format!("Server stopped unexpectedly (exit code {c})"),
+                    ServerStatus::Crashed { code: None } => "Server stopped unexpectedly".to_owned(),
+                    _ => "Server stopped".to_owned(),
+                },
+            );
+            *p.stdin.lock().await = None;
+            p.players.lock().unwrap().clear();
+            p.emit_players();
+            p.set_status(final_status);
+            let _ = exit_tx.send(true);
+        });
+
+        Ok(proc)
+    }
+
+    async fn pump(self: Arc<Self>, stream: impl AsyncRead + Unpin, kind: LogStream, parser: Option<LineParser>) {
+        let mut reader = BufReader::new(stream);
+        let mut buf = Vec::with_capacity(256);
+        loop {
+            buf.clear();
+            match reader.read_until(b'\n', &mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            // Windows consoles may not emit UTF-8; never fail on bad bytes.
+            let raw = String::from_utf8_lossy(&buf);
+            let line = strip_ansi(raw.trim_end_matches(['\r', '\n']));
+            if let Some(ev) = parser.as_ref().and_then(|p| p(&line)) {
+                self.on_line_event(ev);
+            }
+            self.console.push(kind, line);
+        }
+    }
+
+    fn on_line_event(&self, ev: LineEvent) {
+        match ev {
+            LineEvent::Ready => {
+                let mut s = self.status.lock().unwrap();
+                if *s == ServerStatus::Starting {
+                    *s = ServerStatus::Running;
+                    drop(s);
+                    self.emit_status();
+                }
+            }
+            LineEvent::PlayerJoined(n) => {
+                self.players.lock().unwrap().insert(n);
+                self.emit_players();
+            }
+            LineEvent::PlayerLeft(n) => {
+                self.players.lock().unwrap().remove(&n);
+                self.emit_players();
+            }
+        }
+    }
+
+    /// For processes without a readiness banner.
+    pub fn force_running(&self) {
+        self.on_line_event(LineEvent::Ready);
+    }
+
+    pub fn status(&self) -> ServerStatus {
+        self.status.lock().unwrap().clone()
+    }
+
+    pub fn players(&self) -> Vec<String> {
+        self.players.lock().unwrap().iter().cloned().collect()
+    }
+
+    pub fn has_exited(&self) -> bool {
+        *self.exited.borrow()
+    }
+
+    fn set_status(&self, s: ServerStatus) {
+        *self.status.lock().unwrap() = s;
+        self.emit_status();
+    }
+
+    fn emit_status(&self) {
+        self.sink.emit(Event::ServerStatus { instance_id: self.instance_id.clone(), status: self.status() });
+    }
+
+    fn emit_players(&self) {
+        self.sink.emit(Event::ServerPlayers { instance_id: self.instance_id.clone(), players: self.players() });
+    }
+
+    /// Types a line into the server console.
+    pub async fn send_command(&self, line: &str) -> Result<()> {
+        let line = line.trim_end_matches(['\r', '\n']);
+        let mut guard = self.stdin.lock().await;
+        let stdin = guard.as_mut().ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
+        stdin.write_all(format!("{line}\n").as_bytes()).await?;
+        stdin.flush().await?;
+        Ok(())
+    }
+
+    /// Asks the server to stop; force-kills it if it hasn't exited after `timeout`.
+    pub async fn stop(&self, timeout: Duration) {
+        if self.has_exited() {
+            return;
+        }
+        self.stop_requested.store(true, Ordering::SeqCst);
+        self.set_status(ServerStatus::Stopping);
+        self.console.push(LogStream::System, "Stopping server...");
+        if self.send_command(&self.stop_command).await.is_err() {
+            self.kill();
+        }
+        if tokio::time::timeout(timeout, self.wait()).await.is_err() {
+            self.console.push(LogStream::System, "Server did not stop in time; forcing it to close.");
+            self.kill();
+            self.wait().await;
+        }
+    }
+
+    pub fn kill(&self) {
+        self.stop_requested.store(true, Ordering::SeqCst);
+        if let Some(tx) = self.kill_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    }
+
+    pub async fn wait(&self) {
+        let mut rx = self.exited.clone();
+        let _ = rx.wait_for(|e| *e).await;
+    }
+}
+
+/// Removes ANSI color/escape sequences (`ESC [ ... letter`).
+pub fn strip_ansi(s: &str) -> String {
+    if !s.contains('\u{1b}') {
+        return s.to_owned();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_ansi() {
+        assert_eq!(strip_ansi("\u{1b}[32mDone\u{1b}[0m!"), "Done!");
+        assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    #[test]
+    fn console_is_bounded() {
+        let c = Console::new("x".into(), Arc::new(crate::events::NullSink));
+        for i in 0..(CONSOLE_CAPACITY + 10) {
+            c.push(LogStream::Stdout, i.to_string());
+        }
+        let snap = c.snapshot();
+        assert_eq!(snap.len(), CONSOLE_CAPACITY);
+        assert_eq!(snap.last().unwrap().seq as usize, CONSOLE_CAPACITY + 10);
+    }
+}
