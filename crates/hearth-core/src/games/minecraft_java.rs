@@ -278,6 +278,9 @@ pub(crate) fn parse_java_line(line: &str) -> Option<LineEvent> {
     if msg.starts_with("Done (") && msg.contains("For help, type") {
         return Some(LineEvent::Ready);
     }
+    // Minecraft 26.x logs server-sent messages as "System chat: <message>". Player chat never
+    // starts this way (it starts with "<name>"), so this can't be spoofed from chat.
+    let msg = msg.strip_prefix("System chat: ").unwrap_or(msg);
     if let Some(name) = msg.strip_suffix(" joined the game").filter(|n| is_player_name(n)) {
         return Some(LineEvent::PlayerJoined(name.to_owned()));
     }
@@ -336,6 +339,26 @@ mod tests {
         assert_eq!(b.downloads["server:default"].checksums.sha256.len(), 64);
     }
 
+    /// 26.x prefixes server-sent messages with "System chat: " (real Paper 26.3 output).
+    #[test]
+    fn parses_system_chat_prefixed_lines() {
+        assert_eq!(
+            parse_java_line("[22:52:51 INFO]: System chat: Bacon_Dude117 joined the game"),
+            Some(LineEvent::PlayerJoined("Bacon_Dude117".into()))
+        );
+        assert_eq!(
+            parse_java_line("[22:59:10 INFO]: System chat: Bacon_Dude117 left the game"),
+            Some(LineEvent::PlayerLeft("Bacon_Dude117".into()))
+        );
+        assert_eq!(
+            parse_java_line("[02:55:43] [Server thread/INFO]: System chat: .GeyserFriend joined the game"),
+            Some(LineEvent::PlayerJoined(".GeyserFriend".into()))
+        );
+        // Other lines around a join must not count.
+        assert_eq!(parse_java_line("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
+        assert_eq!(parse_java_line("[22:53:06 INFO]: System chat: There are 1 of a max of 20 players online: Bacon_Dude117"), None);
+    }
+
     #[test]
     fn parses_log_lines() {
         let ready_vanilla = "[12:00:01] [Server thread/INFO]: Done (3.214s)! For help, type \"help\"";
@@ -352,6 +375,8 @@ mod tests {
         );
         // Chat spoofing.
         assert_eq!(parse_java_line("[12:01:00 INFO]: <bob> Steve joined the game"), None);
+        assert_eq!(parse_java_line("[12:01:00 INFO]: <bob> System chat: Steve joined the game"), None);
+        assert_eq!(parse_java_line("[12:01:00 INFO]: [Not Secure] <bob> System chat: Steve joined the game"), None);
         assert_eq!(parse_java_line("[12:01:00 INFO]: Starting minecraft server version 26.3"), None);
     }
 }

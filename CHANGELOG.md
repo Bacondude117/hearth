@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] - 2026-11-09
+
+### Fixed
+- Players online always showed 0 on Minecraft 26.x servers. Minecraft 26 logs join and leave messages as `System chat: Name joined the game`, which Hearth didn't recognize.
+
 ## [0.1.0] - 2026-11-09
 
 First release.
