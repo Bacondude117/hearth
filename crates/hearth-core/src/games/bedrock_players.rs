@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::GameContext;
 use crate::error::{Error, Result};
 use crate::players::{
-    clean_reason, read_json_list, write_json_list, PlayerAction, PlayerAdmin, PlayerCaps, PlayerEntry, Role,
-    SeenPlayer,
+    clean_reason, read_json_list, write_json_list, PlayerAction, PlayerAdmin, PlayerCaps, PlayerEntry, Role, SeenPlayer,
 };
 use crate::properties::Properties;
 
@@ -84,19 +83,29 @@ fn xuid_for(name: &str, seen: &[SeenPlayer], allow: &[Allowed]) -> Option<String
     seen.iter()
         .find(|s| s.name.eq_ignore_ascii_case(name))
         .and_then(|s| s.id.clone())
-        .or_else(|| allow.iter().find(|a| a.name.eq_ignore_ascii_case(name)).and_then(|a| a.xuid.clone()))
+        .or_else(|| {
+            allow
+                .iter()
+                .find(|a| a.name.eq_ignore_ascii_case(name))
+                .and_then(|a| a.xuid.clone())
+        })
 }
 
 fn write_role(dir: &Path, name: &str, seen: &[SeenPlayer], role: Role) -> Result<()> {
     let level = role_str(role).ok_or_else(|| Error::InvalidInput("Pick Visitor, Member or Operator.".into()))?;
     let allow: Vec<Allowed> = read_json_list(&dir.join(ALLOWLIST))?;
     let xuid = xuid_for(name, seen, &allow).ok_or_else(|| {
-        Error::InvalidInput(format!("{name} has to join the server once before their role can be changed."))
+        Error::InvalidInput(format!(
+            "{name} has to join the server once before their role can be changed."
+        ))
     })?;
     let path = dir.join(PERMISSIONS);
     let mut perms: Vec<Permission> = read_json_list(&path)?;
     perms.retain(|p| p.xuid != xuid);
-    perms.push(Permission { permission: level.into(), xuid });
+    perms.push(Permission {
+        permission: level.into(),
+        xuid,
+    });
     write_json_list(&path, &perms)
 }
 
@@ -119,7 +128,11 @@ impl PlayerAdmin for BedrockPlayers {
         let default = default_role(dir);
 
         let mut names: Vec<String> = vec![];
-        for n in online.iter().chain(seen.iter().map(|s| &s.name)).chain(allow.iter().map(|a| &a.name)) {
+        for n in online
+            .iter()
+            .chain(seen.iter().map(|s| &s.name))
+            .chain(allow.iter().map(|a| &a.name))
+        {
             if !names.iter().any(|x| x.eq_ignore_ascii_case(n)) {
                 names.push(n.clone());
             }
@@ -144,7 +157,11 @@ impl PlayerAdmin for BedrockPlayers {
                 }
             })
             .collect();
-        out.sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        out.sort_by(|a, b| {
+            b.online
+                .cmp(&a.online)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         Ok(out)
     }
 
@@ -162,7 +179,9 @@ impl PlayerAdmin for BedrockPlayers {
             PlayerAction::Whitelist { on: true } => vec![format!("allowlist add {q}")],
             PlayerAction::Whitelist { on: false } => vec![format!("allowlist remove {q}")],
             PlayerAction::Ban { .. } | PlayerAction::Unban => {
-                return Err(Error::InvalidInput("Bedrock servers don't support bans. Use the allow list instead.".into()))
+                return Err(Error::InvalidInput(
+                    "Bedrock servers don't support bans. Use the allow list instead.".into(),
+                ))
             }
             PlayerAction::Kick { reason } => vec![match clean_reason(reason) {
                 Some(r) => format!("kick {q} {r}"),
@@ -197,14 +216,22 @@ impl PlayerAdmin for BedrockPlayers {
                 let mut allow: Vec<Allowed> = read_json_list(&path)?;
                 allow.retain(|a| !a.name.eq_ignore_ascii_case(name));
                 if *on {
-                    let xuid = seen.iter().find(|s| s.name.eq_ignore_ascii_case(name)).and_then(|s| s.id.clone());
-                    allow.push(Allowed { ignores_player_limit: false, name: name.to_owned(), xuid, extra: BTreeMap::new() });
+                    let xuid = seen
+                        .iter()
+                        .find(|s| s.name.eq_ignore_ascii_case(name))
+                        .and_then(|s| s.id.clone());
+                    allow.push(Allowed {
+                        ignores_player_limit: false,
+                        name: name.to_owned(),
+                        xuid,
+                        extra: BTreeMap::new(),
+                    });
                 }
                 write_json_list(&path, &allow)
             }
-            PlayerAction::Ban { .. } | PlayerAction::Unban => {
-                Err(Error::InvalidInput("Bedrock servers don't support bans. Use the allow list instead.".into()))
-            }
+            PlayerAction::Ban { .. } | PlayerAction::Unban => Err(Error::InvalidInput(
+                "Bedrock servers don't support bans. Use the allow list instead.".into(),
+            )),
             PlayerAction::Kick { .. } | PlayerAction::GameMode { .. } => {
                 Err(Error::Conflict("The player has to be online for that.".into()))
             }
@@ -223,7 +250,11 @@ mod tests {
     }
 
     fn seen(name: &str, xuid: &str) -> SeenPlayer {
-        SeenPlayer { name: name.into(), id: Some(xuid.into()), last_seen: chrono::Utc::now() }
+        SeenPlayer {
+            name: name.into(),
+            id: Some(xuid.into()),
+            last_seen: chrono::Utc::now(),
+        }
     }
 
     #[test]
@@ -231,8 +262,16 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         std::fs::write(dir.join(PERMISSIONS), r#"[{"permission":"operator","xuid":"111"}]"#).unwrap();
-        std::fs::write(dir.join(ALLOWLIST), r#"[{"ignoresPlayerLimit":false,"name":"Kid Brother"}]"#).unwrap();
-        std::fs::write(dir.join("server.properties"), "allow-list=true\ndefault-player-permission-level=member\n").unwrap();
+        std::fs::write(
+            dir.join(ALLOWLIST),
+            r#"[{"ignoresPlayerLimit":false,"name":"Kid Brother"}]"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("server.properties"),
+            "allow-list=true\ndefault-player-permission-level=member\n",
+        )
+        .unwrap();
         let s = vec![seen("Cool Guy 22", "111"), seen("Mom", "222")];
         let list = BedrockPlayers.list(dir, &["Mom".into()], &s).unwrap();
         let get = |n: &str| list.iter().find(|p| p.name == n).unwrap();
@@ -248,8 +287,18 @@ mod tests {
     fn commands_quote_names_with_spaces() {
         let c = |a: PlayerAction| BedrockPlayers.commands("Cool Guy 22", &a).unwrap().join(";");
         assert_eq!(c(PlayerAction::Whitelist { on: true }), "allowlist add \"Cool Guy 22\"");
-        assert_eq!(c(PlayerAction::Kick { reason: Some("bye".into()) }), "kick \"Cool Guy 22\" bye");
-        assert_eq!(c(PlayerAction::GameMode { mode: "creative".into() }), "gamemode creative \"Cool Guy 22\"");
+        assert_eq!(
+            c(PlayerAction::Kick {
+                reason: Some("bye".into())
+            }),
+            "kick \"Cool Guy 22\" bye"
+        );
+        assert_eq!(
+            c(PlayerAction::GameMode {
+                mode: "creative".into()
+            }),
+            "gamemode creative \"Cool Guy 22\""
+        );
         assert_eq!(c(PlayerAction::SetRole { role: Role::Operator }), "permission reload");
         assert!(BedrockPlayers.commands("Cool Guy", &PlayerAction::Unban).is_err());
         assert!(BedrockPlayers.commands("Bob\" op \"Eve", &PlayerAction::Unban).is_err());
@@ -261,19 +310,57 @@ mod tests {
         let dir = tmp.path();
         let s = vec![seen("Cool Guy 22", "111")];
         let ctx = ctx(dir);
-        BedrockPlayers.apply_offline(&ctx, dir, "Cool Guy 22", &s, &PlayerAction::SetRole { role: Role::Operator }).await.unwrap();
-        BedrockPlayers.apply_offline(&ctx, dir, "Cool Guy 22", &s, &PlayerAction::SetRole { role: Role::Visitor }).await.unwrap();
-        let perms: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(PERMISSIONS)).unwrap()).unwrap();
+        BedrockPlayers
+            .apply_offline(
+                &ctx,
+                dir,
+                "Cool Guy 22",
+                &s,
+                &PlayerAction::SetRole { role: Role::Operator },
+            )
+            .await
+            .unwrap();
+        BedrockPlayers
+            .apply_offline(
+                &ctx,
+                dir,
+                "Cool Guy 22",
+                &s,
+                &PlayerAction::SetRole { role: Role::Visitor },
+            )
+            .await
+            .unwrap();
+        let perms: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(PERMISSIONS)).unwrap()).unwrap();
         assert_eq!(perms, serde_json::json!([{"permission":"visitor","xuid":"111"}]));
 
-        BedrockPlayers.apply_offline(&ctx, dir, "Cool Guy 22", &s, &PlayerAction::Whitelist { on: true }).await.unwrap();
-        BedrockPlayers.apply_offline(&ctx, dir, "Stranger", &s, &PlayerAction::Whitelist { on: true }).await.unwrap();
-        BedrockPlayers.apply_offline(&ctx, dir, "stranger", &s, &PlayerAction::Whitelist { on: false }).await.unwrap();
-        let allow: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(ALLOWLIST)).unwrap()).unwrap();
-        assert_eq!(allow, serde_json::json!([{"ignoresPlayerLimit":false,"name":"Cool Guy 22","xuid":"111"}]));
+        BedrockPlayers
+            .apply_offline(&ctx, dir, "Cool Guy 22", &s, &PlayerAction::Whitelist { on: true })
+            .await
+            .unwrap();
+        BedrockPlayers
+            .apply_offline(&ctx, dir, "Stranger", &s, &PlayerAction::Whitelist { on: true })
+            .await
+            .unwrap();
+        BedrockPlayers
+            .apply_offline(&ctx, dir, "stranger", &s, &PlayerAction::Whitelist { on: false })
+            .await
+            .unwrap();
+        let allow: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(ALLOWLIST)).unwrap()).unwrap();
+        assert_eq!(
+            allow,
+            serde_json::json!([{"ignoresPlayerLimit":false,"name":"Cool Guy 22","xuid":"111"}])
+        );
 
         let err = BedrockPlayers
-            .apply_offline(&ctx, dir, "Never Joined", &s, &PlayerAction::SetRole { role: Role::Operator })
+            .apply_offline(
+                &ctx,
+                dir,
+                "Never Joined",
+                &s,
+                &PlayerAction::SetRole { role: Role::Operator },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("join the server once"), "{err}");

@@ -3,6 +3,9 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+/// How long console lines are collected before being sent to the UI as one event.
+pub const LOG_BATCH_INTERVAL: Duration = Duration::from_millis(100);
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -38,25 +41,77 @@ pub struct Console {
     instance_id: String,
     lines: Mutex<(u64, VecDeque<LogLine>)>,
     sink: Arc<dyn EventSink>,
+    /// Lines waiting to be sent to the UI, and whether a flush is already scheduled.
+    pending: Arc<Mutex<Vec<LogLine>>>,
+    flush_scheduled: Arc<AtomicBool>,
 }
 
 impl Console {
     pub fn new(instance_id: String, sink: Arc<dyn EventSink>) -> Self {
-        Self { instance_id, lines: Mutex::new((0, VecDeque::new())), sink }
+        Self {
+            instance_id,
+            lines: Mutex::new((0, VecDeque::new())),
+            sink,
+            pending: Arc::new(Mutex::new(Vec::new())),
+            flush_scheduled: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn push(&self, stream: LogStream, text: impl Into<String>) {
         let line = {
             let mut g = self.lines.lock().unwrap();
             g.0 += 1;
-            let line = LogLine { seq: g.0, text: text.into(), stream };
+            let line = LogLine {
+                seq: g.0,
+                text: text.into(),
+                stream,
+            };
             if g.1.len() >= CONSOLE_CAPACITY {
                 g.1.pop_front();
             }
             g.1.push_back(line.clone());
             line
         };
-        self.sink.emit(Event::ServerLog { instance_id: self.instance_id.clone(), line });
+        {
+            let mut p = self.pending.lock().unwrap();
+            p.push(line);
+            // Never let an unread backlog grow past what the UI keeps anyway.
+            if p.len() > CONSOLE_CAPACITY {
+                let excess = p.len() - CONSOLE_CAPACITY;
+                p.drain(..excess);
+            }
+        }
+        self.schedule_flush();
+    }
+
+    /// Sends pending lines as one event after `LOG_BATCH_INTERVAL`. Without a Tokio runtime
+    /// (plain unit tests) lines are sent immediately.
+    fn schedule_flush(&self) {
+        if self.flush_scheduled.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let (pending, scheduled, sink, id) = (
+            self.pending.clone(),
+            self.flush_scheduled.clone(),
+            self.sink.clone(),
+            self.instance_id.clone(),
+        );
+        let flush = move || {
+            scheduled.store(false, Ordering::Release);
+            let lines = std::mem::take(&mut *pending.lock().unwrap());
+            if !lines.is_empty() {
+                sink.emit(Event::ServerLog { instance_id: id, lines });
+            }
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(rt) => {
+                rt.spawn(async move {
+                    tokio::time::sleep(LOG_BATCH_INTERVAL).await;
+                    flush();
+                });
+            }
+            Err(_) => flush(),
+        }
     }
 
     pub fn snapshot(&self) -> Vec<LogLine> {
@@ -100,8 +155,7 @@ impl ServerProcess {
             .kill_on_drop(true);
         #[cfg(windows)]
         {
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.creation_flags(crate::system::CHILD_PROCESS_FLAGS);
         }
 
         console.push(LogStream::System, format!("Starting {}", spec.program.display()));
@@ -254,18 +308,26 @@ impl ServerProcess {
     }
 
     fn emit_status(&self) {
-        self.sink.emit(Event::ServerStatus { instance_id: self.instance_id.clone(), status: self.status() });
+        self.sink.emit(Event::ServerStatus {
+            instance_id: self.instance_id.clone(),
+            status: self.status(),
+        });
     }
 
     fn emit_players(&self) {
-        self.sink.emit(Event::ServerPlayers { instance_id: self.instance_id.clone(), players: self.players() });
+        self.sink.emit(Event::ServerPlayers {
+            instance_id: self.instance_id.clone(),
+            players: self.players(),
+        });
     }
 
     /// Types a line into the server console.
     pub async fn send_command(&self, line: &str) -> Result<()> {
         let line = line.trim_end_matches(['\r', '\n']);
         let mut guard = self.stdin.lock().await;
-        let stdin = guard.as_mut().ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
+        let stdin = guard
+            .as_mut()
+            .ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
         stdin.write_all(format!("{line}\n").as_bytes()).await?;
         stdin.flush().await?;
         Ok(())
@@ -284,7 +346,8 @@ impl ServerProcess {
             self.kill();
         }
         if tokio::time::timeout(timeout, self.wait()).await.is_err() {
-            self.console.push(LogStream::System, "Server did not stop in time; forcing it to close.");
+            self.console
+                .push(LogStream::System, "Server did not stop in time; forcing it to close.");
             self.kill();
             self.wait().await;
         }
@@ -335,6 +398,35 @@ mod tests {
     fn strips_ansi() {
         assert_eq!(strip_ansi("\u{1b}[32mDone\u{1b}[0m!"), "Done!");
         assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    #[tokio::test]
+    async fn console_batches_bursts_into_few_events() {
+        let sink = Arc::new(crate::events::VecSink::default());
+        let c = Console::new("x".into(), sink.clone());
+        for i in 0..100 {
+            c.push(LogStream::Stdout, i.to_string());
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let events = sink.0.lock().unwrap();
+        let batches: Vec<&Vec<LogLine>> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::ServerLog { lines, .. } => Some(lines),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            batches.len() <= 2,
+            "100 lines should arrive in 1-2 events, got {}",
+            batches.len()
+        );
+        let texts: Vec<String> = batches.iter().flat_map(|b| b.iter().map(|l| l.text.clone())).collect();
+        assert_eq!(
+            texts,
+            (0..100).map(|i| i.to_string()).collect::<Vec<_>>(),
+            "every line, in order"
+        );
     }
 
     #[test]

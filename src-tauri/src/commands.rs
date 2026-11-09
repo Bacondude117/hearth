@@ -2,17 +2,17 @@
 
 use std::collections::HashMap;
 
+use hearth_core::content::ContentEntry;
 use hearth_core::events::LogLine;
 use hearth_core::games::{GameInfo, GameVersion};
 use hearth_core::instance::Instance;
-use hearth_core::content::ContentEntry;
 use hearth_core::manager::{CreateServer, ImportPack, ServerSummary};
 use hearth_core::packs::PackInfo;
-use tauri_plugin_dialog::DialogExt;
-use hearth_core::playit::{PlayitStatus, TunnelInfo};
 use hearth_core::players::{PlayerAction, PlayersView};
+use hearth_core::playit::{PlayitStatus, TunnelInfo};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::AppState;
@@ -84,7 +84,12 @@ pub async fn delete_server(state: State<'_, AppState>, id: String, remove_tunnel
 }
 
 #[tauri::command]
-pub fn update_server(state: State<'_, AppState>, id: String, name: Option<String>, memory_mb: Option<u32>) -> R<Instance> {
+pub fn update_server(
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+    memory_mb: Option<u32>,
+) -> R<Instance> {
     state.manager.update_instance(&id, name, memory_mb).map_err(e)
 }
 

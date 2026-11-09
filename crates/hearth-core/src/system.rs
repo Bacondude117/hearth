@@ -1,5 +1,23 @@
 //! Host facts the UI needs (memory slider bounds).
 
+/// Windows process-creation flags for everything Hearth launches (servers, installers, agents):
+/// no console window, and explicitly *normal* priority. Without the priority flag, children
+/// would inherit Hearth's own below-normal priority (see `lower_own_priority`).
+#[cfg(windows)]
+pub(crate) const CHILD_PROCESS_FLAGS: u32 = 0x0800_0000 /* CREATE_NO_WINDOW */ | 0x0000_0020 /* NORMAL_PRIORITY_CLASS */;
+
+/// Runs Hearth's own UI/manager at below-normal CPU priority so game servers and games get the
+/// CPU first. Servers are started at normal priority regardless. No-op off Windows.
+pub fn lower_own_priority() {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS};
+        if SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS) == 0 {
+            tracing::warn!("could not lower Hearth's priority: {}", std::io::Error::last_os_error());
+        }
+    }
+}
+
 /// Total physical memory in MB, if it can be determined.
 pub fn total_memory_mb() -> Option<u64> {
     imp::total_memory_mb()

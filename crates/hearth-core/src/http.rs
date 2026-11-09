@@ -133,7 +133,10 @@ pub async fn download(
         if expected != actual {
             let _ = tokio::fs::remove_file(&part).await;
             return Err(Error::ChecksumMismatch {
-                file: dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                file: dest
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
             });
         }
     }

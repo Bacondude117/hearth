@@ -43,7 +43,11 @@ struct Package {
 
 impl JavaRuntimes {
     pub fn new(paths: AppPaths, client: reqwest::Client) -> Self {
-        Self { paths, client, lock: Mutex::new(()) }
+        Self {
+            paths,
+            client,
+            lock: Mutex::new(()),
+        }
     }
 
     pub fn dir(&self, major: u32) -> PathBuf {
@@ -131,7 +135,14 @@ impl JavaRuntimes {
 fn unpack(archive: &Path, dest: &Path) -> Result<()> {
     let name = archive.to_string_lossy();
     if name.ends_with(".zip") {
-        extract_zip(archive, dest, &ExtractOptions { strip_single_root: true, ..Default::default() })
+        extract_zip(
+            archive,
+            dest,
+            &ExtractOptions {
+                strip_single_root: true,
+                ..Default::default()
+            },
+        )
     } else if name.ends_with(".tar.gz") {
         let f = std::fs::File::open(archive).at(archive)?;
         let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(f));

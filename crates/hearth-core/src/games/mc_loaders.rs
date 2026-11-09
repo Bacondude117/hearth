@@ -71,12 +71,19 @@ pub(crate) struct FabricVersion {
 pub(crate) fn fabric_game_versions(list: &[FabricVersion]) -> Vec<GameVersion> {
     list.iter()
         .filter(|v| v.stable)
-        .map(|v| GameVersion { id: v.version.clone(), label: v.version.clone(), stable: true })
+        .map(|v| GameVersion {
+            id: v.version.clone(),
+            label: v.version.clone(),
+            stable: true,
+        })
         .collect()
 }
 
 pub(crate) fn latest_stable(list: &[FabricVersion]) -> Option<String> {
-    list.iter().find(|v| v.stable).or(list.first()).map(|v| v.version.clone())
+    list.iter()
+        .find(|v| v.stable)
+        .or(list.first())
+        .map(|v| v.version.clone())
 }
 
 pub async fn fabric_versions(client: &reqwest::Client) -> Result<Vec<GameVersion>> {
@@ -118,15 +125,28 @@ pub(crate) struct ForgePromos {
 }
 
 pub(crate) fn forge_game_versions(p: &ForgePromos) -> Vec<GameVersion> {
-    let mut mcs: Vec<&str> = p.promos.keys().filter_map(|k| k.rsplit_once('-').map(|(mc, _)| mc)).collect();
+    let mut mcs: Vec<&str> = p
+        .promos
+        .keys()
+        .filter_map(|k| k.rsplit_once('-').map(|(mc, _)| mc))
+        .collect();
     mcs.sort_by(|a, b| compare_versions(b, a));
     mcs.dedup();
-    mcs.into_iter().map(|v| GameVersion { id: v.into(), label: v.into(), stable: true }).collect()
+    mcs.into_iter()
+        .map(|v| GameVersion {
+            id: v.into(),
+            label: v.into(),
+            stable: true,
+        })
+        .collect()
 }
 
 /// Recommended build for `mc`, else the latest.
 pub(crate) fn forge_pick(p: &ForgePromos, mc: &str) -> Option<String> {
-    p.promos.get(&format!("{mc}-recommended")).or_else(|| p.promos.get(&format!("{mc}-latest"))).cloned()
+    p.promos
+        .get(&format!("{mc}-recommended"))
+        .or_else(|| p.promos.get(&format!("{mc}-latest")))
+        .cloned()
 }
 
 pub fn forge_installer_url(mc: &str, forge: &str) -> String {
@@ -167,7 +187,13 @@ pub(crate) fn neoforge_game_versions(list: &NeoVersions) -> Vec<GameVersion> {
     let mut mcs: Vec<String> = list.versions.iter().filter_map(|v| neoforge_mc_version(v)).collect();
     mcs.sort_by(|a, b| compare_versions(b, a));
     mcs.dedup();
-    mcs.into_iter().map(|v| GameVersion { label: v.clone(), id: v, stable: true }).collect()
+    mcs.into_iter()
+        .map(|v| GameVersion {
+            label: v.clone(),
+            id: v,
+            stable: true,
+        })
+        .collect()
 }
 
 /// Newest stable NeoForge build for `mc`.
@@ -189,7 +215,9 @@ pub async fn loader_versions(client: &reqwest::Client, loader: Loader) -> Result
     match loader {
         Loader::Fabric => fabric_versions(client).await,
         Loader::Forge => Ok(forge_game_versions(&http::get_json(client, FORGE_PROMOS).await?)),
-        Loader::NeoForge => Ok(neoforge_game_versions(&http::get_json(client, NEOFORGE_VERSIONS).await?)),
+        Loader::NeoForge => Ok(neoforge_game_versions(
+            &http::get_json(client, NEOFORGE_VERSIONS).await?,
+        )),
     }
 }
 
@@ -216,7 +244,12 @@ pub async fn download_installer(
     };
     let path = dir.join(format!("{}-installer.jar", loader.flavor()));
     // The mavens publish .sha1 files next to each artifact.
-    let sha1 = client.get(format!("{url}.sha1")).send().await.ok().filter(|r| r.status().is_success());
+    let sha1 = client
+        .get(format!("{url}.sha1"))
+        .send()
+        .await
+        .ok()
+        .filter(|r| r.status().is_success());
     let checksum = match sha1 {
         Some(r) => r
             .text()
@@ -228,19 +261,37 @@ pub async fn download_installer(
             .unwrap_or(http::Checksum::None),
         None => http::Checksum::None,
     };
-    http::download(client, &url, &path, &checksum, |f| progress(&format!("Downloading {} installer", loader.display()), f))
-        .await?;
+    http::download(client, &url, &path, &checksum, |f| {
+        progress(&format!("Downloading {} installer", loader.display()), f)
+    })
+    .await?;
     Ok((path, version))
 }
 
 /// Runs a Forge/NeoForge installer in server mode inside `dir`.
-pub async fn run_installer(java: &Path, installer: &Path, dir: &Path, loader: Loader, progress: Progress<'_>) -> Result<()> {
-    progress(&format!("Installing {} (this can take a few minutes)", loader.display()), None);
+pub async fn run_installer(
+    java: &Path,
+    installer: &Path,
+    dir: &Path,
+    loader: Loader,
+    progress: Progress<'_>,
+) -> Result<()> {
+    progress(
+        &format!("Installing {} (this can take a few minutes)", loader.display()),
+        None,
+    );
     let mut cmd = tokio::process::Command::new(java);
-    cmd.arg("-jar").arg(installer).arg("--installServer").arg(".").current_dir(dir);
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    cmd.arg("-jar")
+        .arg(installer)
+        .arg("--installServer")
+        .arg(".")
+        .current_dir(dir);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    cmd.creation_flags(crate::system::CHILD_PROCESS_FLAGS);
     let mut child = cmd
         .spawn()
         .map_err(|e| Error::InvalidInput(format!("Could not run the {} installer: {e}", loader.display())))?;
@@ -249,7 +300,8 @@ pub async fn run_installer(java: &Path, installer: &Path, dir: &Path, loader: Lo
     let stdout = child.stdout.take().expect("piped");
     let stderr = child.stderr.take().expect("piped");
     let tail = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::<String>::new()));
-    let collect = |stream: Box<dyn tokio::io::AsyncRead + Unpin + Send>, tail: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>| async move {
+    let collect = |stream: Box<dyn tokio::io::AsyncRead + Unpin + Send>,
+                   tail: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>| async move {
         let mut lines = BufReader::new(stream).lines();
         while let Ok(Some(l)) = lines.next_line().await {
             let mut t = tail.lock().unwrap();
@@ -259,13 +311,21 @@ pub async fn run_installer(java: &Path, installer: &Path, dir: &Path, loader: Lo
             t.push_back(l);
         }
     };
-    let (a, b) = (collect(Box::new(stdout), tail.clone()), collect(Box::new(stderr), tail.clone()));
+    let (a, b) = (
+        collect(Box::new(stdout), tail.clone()),
+        collect(Box::new(stderr), tail.clone()),
+    );
     let status = tokio::time::timeout(std::time::Duration::from_secs(20 * 60), async {
         let (_, _, s) = tokio::join!(a, b, child.wait());
         s
     })
     .await
-    .map_err(|_| Error::InvalidInput(format!("The {} installer took too long and was stopped.", loader.display())))??;
+    .map_err(|_| {
+        Error::InvalidInput(format!(
+            "The {} installer took too long and was stopped.",
+            loader.display()
+        ))
+    })??;
 
     if !status.success() {
         let tail = tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("\n");
@@ -289,8 +349,14 @@ fn args_file_name() -> &'static str {
 /// Finds Forge/NeoForge's generated args file (relative to `dir`), newest version first.
 pub fn find_args_file(dir: &Path) -> Option<String> {
     let mut found: Vec<(String, String)> = vec![]; // (version dir name, relative path)
-    for base in ["libraries/net/neoforged/neoforge", "libraries/net/minecraftforge/forge", "libraries/net/neoforged/forge"] {
-        let Ok(entries) = std::fs::read_dir(dir.join(base)) else { continue };
+    for base in [
+        "libraries/net/neoforged/neoforge",
+        "libraries/net/minecraftforge/forge",
+        "libraries/net/neoforged/forge",
+    ] {
+        let Ok(entries) = std::fs::read_dir(dir.join(base)) else {
+            continue;
+        };
         for e in entries.flatten() {
             let candidate = e.path().join(args_file_name());
             if candidate.is_file() {
@@ -317,7 +383,10 @@ pub fn find_fabric_launcher(dir: &Path) -> Option<String> {
 /// A Forge/NeoForge installer jar sitting in `dir` (server packs often include one).
 pub fn find_installer_jar(dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| {
-        let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let n = p
+            .file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
         n.ends_with(".jar") && n.contains("installer") && (n.contains("forge") || n.contains("neoforge"))
     })
 }
@@ -337,7 +406,11 @@ pub fn parse_install_profile(json: &str) -> Option<(Loader, String, String)> {
         return Some((Loader::NeoForge, p.minecraft, v.to_owned()));
     }
     if let Some((_, v)) = p.version.split_once("-forge-") {
-        let loader = if p.profile.eq_ignore_ascii_case("neoforge") { Loader::NeoForge } else { Loader::Forge };
+        let loader = if p.profile.eq_ignore_ascii_case("neoforge") {
+            Loader::NeoForge
+        } else {
+            Loader::Forge
+        };
         return Some((loader, p.minecraft, v.to_owned()));
     }
     None
@@ -382,12 +455,19 @@ pub fn clear_loader_files(dir: &Path, loader: Loader) {
     };
     for t in targets {
         let p = dir.join(t);
-        let _ = if p.is_dir() { std::fs::remove_dir_all(&p) } else { std::fs::remove_file(&p) };
+        let _ = if p.is_dir() {
+            std::fs::remove_dir_all(&p)
+        } else {
+            std::fs::remove_file(&p)
+        };
     }
 }
 
 fn bad(source: &str, detail: &str) -> Error {
-    Error::BadResponse { source_name: source.into(), detail: detail.into() }
+    Error::BadResponse {
+        source_name: source.into(),
+        detail: detail.into(),
+    }
 }
 
 #[cfg(test)]
@@ -420,7 +500,11 @@ mod tests {
         let mcs: Vec<String> = forge_game_versions(&p).into_iter().map(|v| v.id).collect();
         assert_eq!(mcs.first().map(String::as_str), Some("26.3"));
         assert!(mcs.contains(&"1.20.1".to_string()));
-        assert_eq!(forge_pick(&p, "26.3").as_deref(), Some("66.1.0"), "recommended wins over latest");
+        assert_eq!(
+            forge_pick(&p, "26.3").as_deref(),
+            Some("66.1.0"),
+            "recommended wins over latest"
+        );
         assert_eq!(
             forge_installer_url("26.3", "66.1.0"),
             "https://maven.minecraftforge.net/net/minecraftforge/forge/26.3-66.1.0/forge-26.3-66.1.0-installer.jar"
@@ -429,11 +513,13 @@ mod tests {
 
     #[test]
     fn fabric_fixtures() {
-        let g: Vec<FabricVersion> = serde_json::from_str(include_str!("../../tests/fixtures/fabric_game.json")).unwrap();
+        let g: Vec<FabricVersion> =
+            serde_json::from_str(include_str!("../../tests/fixtures/fabric_game.json")).unwrap();
         let v = fabric_game_versions(&g);
         assert!(v.iter().all(|v| !v.id.contains("snapshot")));
         assert!(v.iter().any(|v| v.id == "1.21.1"));
-        let l: Vec<FabricVersion> = serde_json::from_str(include_str!("../../tests/fixtures/fabric_loader.json")).unwrap();
+        let l: Vec<FabricVersion> =
+            serde_json::from_str(include_str!("../../tests/fixtures/fabric_loader.json")).unwrap();
         assert_eq!(latest_stable(&l).as_deref(), Some("0.20.1"));
     }
 
@@ -475,10 +561,19 @@ mod tests {
             std::fs::create_dir_all(&p).unwrap();
             std::fs::write(p.join(args_file_name()), "-jar x").unwrap();
         }
-        assert_eq!(find_args_file(d), Some(format!("libraries/net/neoforged/neoforge/26.3.0.101/{}", args_file_name())));
+        assert_eq!(
+            find_args_file(d),
+            Some(format!(
+                "libraries/net/neoforged/neoforge/26.3.0.101/{}",
+                args_file_name()
+            ))
+        );
 
         std::fs::write(d.join("fabric-server-mc.26.3-loader.0.20.1-launcher.1.1.2.jar"), "").unwrap();
-        assert_eq!(find_fabric_launcher(d).as_deref(), Some("fabric-server-mc.26.3-loader.0.20.1-launcher.1.1.2.jar"));
+        assert_eq!(
+            find_fabric_launcher(d).as_deref(),
+            Some("fabric-server-mc.26.3-loader.0.20.1-launcher.1.1.2.jar")
+        );
         std::fs::write(d.join("forge-1.20.1-47.3.0-installer.jar"), "").unwrap();
         assert!(find_installer_jar(d).is_some());
     }

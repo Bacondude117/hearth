@@ -174,7 +174,7 @@ export interface CreateServer {
 export type HearthEvent =
   | { type: "installProgress"; instanceId: string; stage: string; fraction: number | null }
   | { type: "installFinished"; instanceId: string; error: string | null }
-  | { type: "serverLog"; instanceId: string; line: LogLine }
+  | { type: "serverLog"; instanceId: string; lines: LogLine[] }
   | { type: "serverStatus"; instanceId: string; status: ServerStatus }
   | { type: "serverPlayers"; instanceId: string; players: string[] }
   | { type: "instancesChanged" }

@@ -14,7 +14,11 @@ fn installed(root: &std::path::Path, id: &str, game: &str) {
         id: id.into(),
         name: "Test".into(),
         game: game.into(),
-        flavor: if game == "minecraft-java" { "paper".into() } else { "bedrock".into() },
+        flavor: if game == "minecraft-java" {
+            "paper".into()
+        } else {
+            "bedrock".into()
+        },
         version: "26.3".into(),
         installed_build: None,
         port: 25565,
@@ -50,8 +54,16 @@ async fn java_offline_actions_round_trip() {
     assert_eq!(view.players.len(), 1);
     assert_eq!(view.players[0].role, Role::Player);
 
-    m.player_action("java-0001", "Bacon_Dude117", PlayerAction::SetRole { role: Role::Operator }).await.unwrap();
-    m.player_action("java-0001", "Bacon_Dude117", PlayerAction::Whitelist { on: true }).await.unwrap();
+    m.player_action(
+        "java-0001",
+        "Bacon_Dude117",
+        PlayerAction::SetRole { role: Role::Operator },
+    )
+    .await
+    .unwrap();
+    m.player_action("java-0001", "Bacon_Dude117", PlayerAction::Whitelist { on: true })
+        .await
+        .unwrap();
     let p = &m.players("java-0001").unwrap().players[0];
     assert_eq!(p.role, Role::Operator);
     assert!(p.whitelisted);
@@ -69,14 +81,23 @@ async fn bedrock_role_needs_a_known_xuid() {
     installed(tmp.path(), "bed-0001", "minecraft-bedrock");
     let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
 
-    m.player_action("bed-0001", "Cool Guy 22", PlayerAction::Whitelist { on: true }).await.unwrap();
+    m.player_action("bed-0001", "Cool Guy 22", PlayerAction::Whitelist { on: true })
+        .await
+        .unwrap();
     let view = m.players("bed-0001").unwrap();
     assert_eq!(view.caps.whitelist_label, "Allow list");
     assert!(!view.caps.can_ban);
-    assert!(view.players.iter().any(|p| p.name == "Cool Guy 22" && p.whitelisted && p.id.is_none()));
+    assert!(view
+        .players
+        .iter()
+        .any(|p| p.name == "Cool Guy 22" && p.whitelisted && p.id.is_none()));
 
     let err = m
-        .player_action("bed-0001", "Cool Guy 22", PlayerAction::SetRole { role: Role::Operator })
+        .player_action(
+            "bed-0001",
+            "Cool Guy 22",
+            PlayerAction::SetRole { role: Role::Operator },
+        )
         .await
         .unwrap_err();
     assert!(err.to_string().contains("join the server once"), "{err}");

@@ -19,14 +19,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Serialize;
 
+use crate::content::ContentFolder;
 use crate::error::{Error, Result};
 use crate::instance::Instance;
+use crate::instance::JavaLaunch;
 use crate::java::JavaRuntimes;
 use crate::net::Protocol;
-use crate::paths::AppPaths;
-use crate::content::ContentFolder;
-use crate::instance::JavaLaunch;
 use crate::packs::PackInfo;
+use crate::paths::AppPaths;
 use crate::players::PlayerAdmin;
 
 /// Shared services a provider may use.
@@ -184,7 +184,12 @@ pub trait GameProvider: Send + Sync {
 
     /// For servers without a console: poll their admin API. `Some(Ok(players))` also means the
     /// server is ready. `None` means this game reports through its log instead.
-    async fn poll(&self, _ctx: &GameContext, _inst: &Instance, _server_dir: &Path) -> Option<Result<Vec<RemotePlayer>>> {
+    async fn poll(
+        &self,
+        _ctx: &GameContext,
+        _inst: &Instance,
+        _server_dir: &Path,
+    ) -> Option<Result<Vec<RemotePlayer>>> {
         None
     }
 
@@ -195,7 +200,13 @@ pub trait GameProvider: Send + Sync {
     }
 
     /// Handles a line typed in the console box when the game has no stdin console.
-    async fn console_input(&self, _ctx: &GameContext, _inst: &Instance, _server_dir: &Path, _line: &str) -> Option<Result<()>> {
+    async fn console_input(
+        &self,
+        _ctx: &GameContext,
+        _inst: &Instance,
+        _server_dir: &Path,
+        _line: &str,
+    ) -> Option<Result<()>> {
         None
     }
 
@@ -296,7 +307,13 @@ fn split_pre(v: &str) -> (&str, Option<&str>) {
 
 /// Compares strings treating digit runs as numbers (`rc10 > rc9`).
 fn natural_cmp(a: &str, b: &str) -> Ordering {
-    let digits = |s: &str| -> u64 { s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap_or(0) };
+    let digits = |s: &str| -> u64 {
+        s.chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0)
+    };
     let letters = |s: &str| -> String { s.chars().filter(|c| !c.is_ascii_digit()).collect() };
     letters(a).cmp(&letters(b)).then(digits(a).cmp(&digits(b)))
 }
@@ -307,9 +324,30 @@ mod tests {
 
     #[test]
     fn version_ordering() {
-        let mut v = vec!["1.21.11", "26.3-rc-3", "1.8.9", "26.3", "1.21.9", "26.1.2", "1.21.11-pre5", "26.3-rc-10"];
+        let mut v = vec![
+            "1.21.11",
+            "26.3-rc-3",
+            "1.8.9",
+            "26.3",
+            "1.21.9",
+            "26.1.2",
+            "1.21.11-pre5",
+            "26.3-rc-10",
+        ];
         v.sort_by(|a, b| compare_versions(b, a));
-        assert_eq!(v, vec!["26.3", "26.3-rc-10", "26.3-rc-3", "26.1.2", "1.21.11", "1.21.11-pre5", "1.21.9", "1.8.9"]);
+        assert_eq!(
+            v,
+            vec![
+                "26.3",
+                "26.3-rc-10",
+                "26.3-rc-3",
+                "26.1.2",
+                "1.21.11",
+                "1.21.11-pre5",
+                "1.21.9",
+                "1.8.9"
+            ]
+        );
     }
 
     #[test]

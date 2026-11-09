@@ -17,7 +17,11 @@ pub fn extract_zip(zip_path: &Path, dest: &Path, opts: &ExtractOptions) -> Resul
     let file = fs::File::open(zip_path).at(zip_path)?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| Error::Archive(e.to_string()))?;
 
-    let root = if opts.strip_single_root { single_root(&mut zip)? } else { None };
+    let root = if opts.strip_single_root {
+        single_root(&mut zip)?
+    } else {
+        None
+    };
 
     fs::create_dir_all(dest).at(dest)?;
     for i in 0..zip.len() {
@@ -127,7 +131,8 @@ mod tests {
         let mut w = zip::ZipWriter::new(f);
         for (name, body) in entries {
             if name.ends_with('/') {
-                w.add_directory(*name, zip::write::SimpleFileOptions::default()).unwrap();
+                w.add_directory(*name, zip::write::SimpleFileOptions::default())
+                    .unwrap();
             } else {
                 w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
                 w.write_all(body.as_bytes()).unwrap();
@@ -140,9 +145,20 @@ mod tests {
     fn strips_single_root() {
         let tmp = tempfile::tempdir().unwrap();
         let z = tmp.path().join("a.zip");
-        make_zip(&z, &[("jdk-21/", ""), ("jdk-21/bin/java", "x"), ("jdk-21/release", "r")]);
+        make_zip(
+            &z,
+            &[("jdk-21/", ""), ("jdk-21/bin/java", "x"), ("jdk-21/release", "r")],
+        );
         let out = tmp.path().join("out");
-        extract_zip(&z, &out, &ExtractOptions { strip_single_root: true, ..Default::default() }).unwrap();
+        extract_zip(
+            &z,
+            &out,
+            &ExtractOptions {
+                strip_single_root: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(out.join("bin/java").exists());
         assert!(out.join("release").exists());
     }
@@ -151,9 +167,24 @@ mod tests {
     fn keeps_layout_when_multiple_roots() {
         let tmp = tempfile::tempdir().unwrap();
         let z = tmp.path().join("a.zip");
-        make_zip(&z, &[("bedrock_server.exe", "x"), ("worlds/", ""), ("server.properties", "a=1")]);
+        make_zip(
+            &z,
+            &[
+                ("bedrock_server.exe", "x"),
+                ("worlds/", ""),
+                ("server.properties", "a=1"),
+            ],
+        );
         let out = tmp.path().join("out");
-        extract_zip(&z, &out, &ExtractOptions { strip_single_root: true, ..Default::default() }).unwrap();
+        extract_zip(
+            &z,
+            &out,
+            &ExtractOptions {
+                strip_single_root: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(out.join("bedrock_server.exe").exists());
         assert!(out.join("server.properties").exists());
     }
@@ -167,7 +198,10 @@ mod tests {
         fs::create_dir_all(&out).unwrap();
         fs::write(out.join("server.properties"), "mine").unwrap();
         fs::write(out.join("bedrock_server.exe"), "v1").unwrap();
-        let opts = ExtractOptions { preserve: vec!["server.properties".into()], ..Default::default() };
+        let opts = ExtractOptions {
+            preserve: vec!["server.properties".into()],
+            ..Default::default()
+        };
         extract_zip(&z, &out, &opts).unwrap();
         assert_eq!(fs::read_to_string(out.join("server.properties")).unwrap(), "mine");
         assert_eq!(fs::read_to_string(out.join("bedrock_server.exe")).unwrap(), "v2");
@@ -177,7 +211,14 @@ mod tests {
     fn extracts_only_a_prefix() {
         let tmp = tempfile::tempdir().unwrap();
         let z = tmp.path().join("p.zip");
-        make_zip(&z, &[("modrinth.index.json", "{}"), ("overrides/config/a.toml", "a"), ("server-overrides/config/a.toml", "b")]);
+        make_zip(
+            &z,
+            &[
+                ("modrinth.index.json", "{}"),
+                ("overrides/config/a.toml", "a"),
+                ("server-overrides/config/a.toml", "b"),
+            ],
+        );
         let out = tmp.path().join("out");
         assert_eq!(extract_zip_prefix(&z, "overrides", &out).unwrap(), 1);
         assert_eq!(fs::read_to_string(out.join("config/a.toml")).unwrap(), "a");

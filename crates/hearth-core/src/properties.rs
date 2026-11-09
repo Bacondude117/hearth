@@ -26,7 +26,10 @@ impl Properties {
                     return Line::Other(raw.to_owned());
                 }
                 match raw.split_once('=') {
-                    Some((k, v)) => Line::Entry { key: k.trim().to_owned(), value: v.to_owned() },
+                    Some((k, v)) => Line::Entry {
+                        key: k.trim().to_owned(),
+                        value: v.to_owned(),
+                    },
                     None => Line::Other(raw.to_owned()),
                 }
             })
@@ -63,7 +66,10 @@ impl Properties {
                 }
             }
         }
-        self.lines.push(Line::Entry { key: key.to_owned(), value });
+        self.lines.push(Line::Entry {
+            key: key.to_owned(),
+            value,
+        });
     }
 
     pub fn entries(&self) -> Vec<(String, String)> {
@@ -106,7 +112,8 @@ fn sanitize(v: String) -> String {
 mod tests {
     use super::*;
 
-    const SAMPLE: &str = "#Minecraft server properties\n#Sat Nov 08\nmotd=A Minecraft Server\n\nserver-port=25565\nlevel-seed=\n";
+    const SAMPLE: &str =
+        "#Minecraft server properties\n#Sat Nov 08\nmotd=A Minecraft Server\n\nserver-port=25565\nlevel-seed=\n";
 
     #[test]
     fn round_trips_unchanged() {

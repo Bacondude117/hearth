@@ -50,7 +50,11 @@ fn is_addon(name: &str, ext: &str) -> bool {
     base.rsplit_once('.').is_some_and(|(_, e)| e.eq_ignore_ascii_case(ext))
 }
 
-pub fn list(dir: &Path, folder: &ContentFolder, describe: impl Fn(&Path) -> Option<(String, Option<String>)>) -> Result<Vec<ContentEntry>> {
+pub fn list(
+    dir: &Path,
+    folder: &ContentFolder,
+    describe: impl Fn(&Path) -> Option<(String, Option<String>)>,
+) -> Result<Vec<ContentEntry>> {
     let root = dir.join(folder.folder);
     if !root.exists() {
         return Ok(vec![]);
@@ -74,7 +78,7 @@ pub fn list(dir: &Path, folder: &ContentFolder, describe: impl Fn(&Path) -> Opti
             version,
         });
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 
@@ -84,10 +88,16 @@ pub fn add(dir: &Path, folder: &ContentFolder, files: &[PathBuf]) -> Result<Vec<
     std::fs::create_dir_all(&root).at(&root)?;
     let mut added = vec![];
     for src in files {
-        let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         check_file_name(&name)?;
         if !is_addon(&name, folder.extension) || name.ends_with(DISABLED_SUFFIX) {
-            return Err(Error::InvalidInput(format!("{name} isn't a .{} file.", folder.extension)));
+            return Err(Error::InvalidInput(format!(
+                "{name} isn't a .{} file.",
+                folder.extension
+            )));
         }
         // Replace a disabled copy of the same file, too.
         let _ = std::fs::remove_file(root.join(format!("{name}{DISABLED_SUFFIX}")));
@@ -126,7 +136,11 @@ pub fn delete(dir: &Path, folder: &ContentFolder, file: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    const MODS: ContentFolder = ContentFolder { label: "Mods", folder: "mods", extension: "jar" };
+    const MODS: ContentFolder = ContentFolder {
+        label: "Mods",
+        folder: "mods",
+        extension: "jar",
+    };
 
     #[test]
     fn add_list_toggle_delete() {
@@ -136,14 +150,20 @@ mod tests {
         let server = tmp.path().join("server");
         assert!(list(&server, &MODS, |_| None).unwrap().is_empty());
 
-        assert_eq!(add(&server, &MODS, &[src.clone()]).unwrap(), vec!["sodium-0.6.jar"]);
+        assert_eq!(
+            add(&server, &MODS, std::slice::from_ref(&src)).unwrap(),
+            vec!["sodium-0.6.jar"]
+        );
         std::fs::write(server.join("mods/readme.txt"), b"").unwrap();
         let l = list(&server, &MODS, |_| None).unwrap();
         assert_eq!(l.len(), 1, "non-jar files are ignored");
         assert_eq!(l[0].name, "sodium-0.6");
         assert!(l[0].enabled);
 
-        assert_eq!(set_enabled(&server, &MODS, "sodium-0.6.jar", false).unwrap(), "sodium-0.6.jar.disabled");
+        assert_eq!(
+            set_enabled(&server, &MODS, "sodium-0.6.jar", false).unwrap(),
+            "sodium-0.6.jar.disabled"
+        );
         let l = list(&server, &MODS, |_| Some(("Sodium".into(), Some("0.6".into())))).unwrap();
         assert!(!l[0].enabled);
         assert_eq!(l[0].name, "Sodium");

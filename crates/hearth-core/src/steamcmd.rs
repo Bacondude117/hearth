@@ -27,7 +27,10 @@ pub struct SteamCmd {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SteamEvent {
     /// "downloading", "verifying", "preallocating", "committing" + percent (0..=100).
-    Progress { state: String, percent: f64 },
+    Progress {
+        state: String,
+        percent: f64,
+    },
     Success,
     Error(String),
 }
@@ -49,7 +52,10 @@ pub fn parse_line(line: &str) -> Option<SteamEvent> {
     let (_, rest) = rest.split_once(") ")?;
     let (state, rest) = rest.split_once(", progress: ")?;
     let percent: f64 = rest.split_whitespace().next()?.parse().ok()?;
-    Some(SteamEvent::Progress { state: state.trim().to_owned(), percent })
+    Some(SteamEvent::Progress {
+        state: state.trim().to_owned(),
+        percent,
+    })
 }
 
 /// Reads `"buildid"` from `steamapps/appmanifest_<app>.acf` after an install.
@@ -57,7 +63,9 @@ pub fn installed_build(dir: &Path, app_id: u32) -> Option<String> {
     let text = std::fs::read_to_string(dir.join(format!("steamapps/appmanifest_{app_id}.acf"))).ok()?;
     text.lines().find_map(|l| {
         let mut parts = l.split('"').filter(|p| !p.trim().is_empty());
-        (parts.next()? == "buildid").then(|| parts.next().map(str::to_owned)).flatten()
+        (parts.next()? == "buildid")
+            .then(|| parts.next().map(str::to_owned))
+            .flatten()
     })
 }
 
@@ -73,7 +81,11 @@ fn stage_label(state: &str) -> &'static str {
 
 impl SteamCmd {
     pub fn new(paths: AppPaths, client: reqwest::Client) -> Self {
-        Self { paths, client, lock: Mutex::new(()) }
+        Self {
+            paths,
+            client,
+            lock: Mutex::new(()),
+        }
     }
 
     fn dir(&self) -> PathBuf {
@@ -101,7 +113,10 @@ impl SteamCmd {
         };
         let archive = self.paths.cache().join(name);
         // Valve publishes no checksum for the bootstrapper; HTTPS only.
-        http::download(&self.client, url, &archive, &Checksum::None, |f| progress("Downloading SteamCMD", f)).await?;
+        http::download(&self.client, url, &archive, &Checksum::None, |f| {
+            progress("Downloading SteamCMD", f)
+        })
+        .await?;
         let (a, d) = (archive.clone(), dir.clone());
         tokio::task::spawn_blocking(move || -> Result<()> {
             if a.to_string_lossy().ends_with(".zip") {
@@ -116,7 +131,10 @@ impl SteamCmd {
         .expect("extract task panicked")?;
         let _ = tokio::fs::remove_file(&archive).await;
         if !exe.exists() {
-            return Err(Error::BadResponse { source_name: "Steam".into(), detail: "SteamCMD archive was missing steamcmd".into() });
+            return Err(Error::BadResponse {
+                source_name: "Steam".into(),
+                detail: "SteamCMD archive was missing steamcmd".into(),
+            });
         }
         Ok(exe)
     }
@@ -133,7 +151,14 @@ impl SteamCmd {
         tokio::fs::create_dir_all(dir).await.at(dir)?;
         let mut last_error = String::new();
         for attempt in 1..=ATTEMPTS {
-            progress(if attempt == 1 { "Starting SteamCMD" } else { "Retrying SteamCMD" }, None);
+            progress(
+                if attempt == 1 {
+                    "Starting SteamCMD"
+                } else {
+                    "Retrying SteamCMD"
+                },
+                None,
+            );
             match self.run_once(&exe, app_id, dir, progress).await {
                 Ok(()) => return Ok(()),
                 Err(e) => {
@@ -142,7 +167,9 @@ impl SteamCmd {
                 }
             }
         }
-        Err(Error::InvalidInput(format!("SteamCMD couldn't install the server: {last_error}")))
+        Err(Error::InvalidInput(format!(
+            "SteamCMD couldn't install the server: {last_error}"
+        )))
     }
 
     async fn run_once(
@@ -155,15 +182,24 @@ impl SteamCmd {
         let mut cmd = tokio::process::Command::new(exe);
         cmd.arg("+force_install_dir")
             .arg(dir)
-            .args(["+login", "anonymous", "+app_update", &app_id.to_string(), "validate", "+quit"])
+            .args([
+                "+login",
+                "anonymous",
+                "+app_update",
+                &app_id.to_string(),
+                "validate",
+                "+quit",
+            ])
             .current_dir(self.dir())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
         #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        let mut child = cmd.spawn().map_err(|e| Error::InvalidInput(format!("Could not start SteamCMD: {e}")))?;
+        cmd.creation_flags(crate::system::CHILD_PROCESS_FLAGS);
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| Error::InvalidInput(format!("Could not start SteamCMD: {e}")))?;
         let stdout = child.stdout.take().expect("piped");
         // Drain stderr so a chatty SteamCMD can't block on a full pipe.
         if let Some(stderr) = child.stderr.take() {
@@ -178,7 +214,9 @@ impl SteamCmd {
         let mut tail: Vec<String> = vec![];
         while let Ok(Some(line)) = lines.next_line().await {
             match parse_line(&line) {
-                Some(SteamEvent::Progress { state, percent }) => progress(stage_label(&state), Some((percent / 100.0).clamp(0.0, 1.0))),
+                Some(SteamEvent::Progress { state, percent }) => {
+                    progress(stage_label(&state), Some((percent / 100.0).clamp(0.0, 1.0)))
+                }
                 Some(SteamEvent::Success) => success = true,
                 Some(SteamEvent::Error(e)) => error = Some(e),
                 None => {}
@@ -213,16 +251,27 @@ mod tests {
     fn parses_steamcmd_output() {
         assert_eq!(
             parse_line(" Update state (0x61) downloading, progress: 45.23 (1462829312 / 3234059869)"),
-            Some(SteamEvent::Progress { state: "downloading".into(), percent: 45.23 })
+            Some(SteamEvent::Progress {
+                state: "downloading".into(),
+                percent: 45.23
+            })
         );
         assert_eq!(
             parse_line(" Update state (0x81) verifying update, progress: 3.10 (100 / 3234059869)"),
-            Some(SteamEvent::Progress { state: "verifying update".into(), percent: 3.10 })
+            Some(SteamEvent::Progress {
+                state: "verifying update".into(),
+                percent: 3.10
+            })
         );
-        assert_eq!(parse_line("Success! App '2394010' fully installed."), Some(SteamEvent::Success));
+        assert_eq!(
+            parse_line("Success! App '2394010' fully installed."),
+            Some(SteamEvent::Success)
+        );
         assert_eq!(
             parse_line("Error! App '2394010' state is 0x202 after update job."),
-            Some(SteamEvent::Error("App '2394010' state is 0x202 after update job.".into()))
+            Some(SteamEvent::Error(
+                "App '2394010' state is 0x202 after update job.".into()
+            ))
         );
         assert_eq!(parse_line("Loading Steam API...OK"), None);
         assert_eq!(parse_line("[  0%] Checking for available updates..."), None);

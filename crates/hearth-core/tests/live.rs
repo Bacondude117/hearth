@@ -47,7 +47,14 @@ async fn installs_starts_and_stops_vanilla() {
 async fn install_start_stop(flavor: &str) {
     let tmp = tempfile::tempdir().unwrap();
     let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
-    let version = m.versions("minecraft-java", flavor).await.unwrap().into_iter().find(|v| v.stable).unwrap().id;
+    let version = m
+        .versions("minecraft-java", flavor)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|v| v.stable)
+        .unwrap()
+        .id;
     let inst = m
         .create(CreateServer {
             name: "Live Test".into(),
@@ -74,7 +81,10 @@ async fn install_start_stop(flavor: &str) {
     )
     .await;
     let installed = m.get(&id).unwrap().instance;
-    println!("installed {:?} java {:?}", installed.installed_build, installed.java_major);
+    println!(
+        "installed {:?} java {:?}",
+        installed.installed_build, installed.java_major
+    );
 
     m.start(&id).await.unwrap();
     wait_for(
@@ -157,12 +167,21 @@ async fn installs_and_boots_fabric() {
         .unwrap();
     wait_installed(&m, &inst.id).await;
     let s = m.get(&inst.id).unwrap();
-    println!("installed {:?} launch {:?}", s.instance.installed_build, s.instance.launch);
+    println!(
+        "installed {:?} launch {:?}",
+        s.instance.installed_build, s.instance.launch
+    );
     let dir = m.server_dir(&inst.id).unwrap();
     for e in std::fs::read_dir(&dir).unwrap().flatten() {
-        println!("  file: {} {}", e.file_name().to_string_lossy(), e.metadata().map(|m| m.len()).unwrap_or(0));
+        println!(
+            "  file: {} {}",
+            e.file_name().to_string_lossy(),
+            e.metadata().map(|m| m.len()).unwrap_or(0)
+        );
     }
-    for l in m.console_lines(&inst.id) { println!("  log: {}", l.text); }
+    for l in m.console_lines(&inst.id) {
+        println!("  log: {}", l.text);
+    }
     assert_eq!(s.content.map(|c| c.label), Some("Mods"));
     boot_and_stop(&m, &inst.id).await;
 }
@@ -198,8 +217,14 @@ async fn imports_and_boots_mrpack() {
     let mut index = index;
     index["dependencies"].as_object_mut().unwrap().remove("fabric-loader");
     index["dependencies"]["fabric-loader"] = serde_json::json!(
-        client.get("https://meta.fabricmc.net/v2/versions/loader").send().await.unwrap()
-            .json::<serde_json::Value>().await.unwrap()[0]["version"]
+        client
+            .get("https://meta.fabricmc.net/v2/versions/loader")
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()[0]["version"]
     );
 
     let pack = tmp.path().join("live.mrpack");
@@ -232,17 +257,26 @@ async fn imports_and_boots_mrpack() {
         .unwrap();
     wait_installed(&m, &inst.id).await;
     let dir = m.server_dir(&inst.id).unwrap();
-    assert_eq!(std::fs::read_to_string(dir.join("config/hearth-test.txt")).unwrap(), "server");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("config/hearth-test.txt")).unwrap(),
+        "server"
+    );
     assert!(!dir.join("mods/client-only.jar").exists());
     let s = m.get(&inst.id).unwrap().instance;
-    assert!(s.pack.as_ref().unwrap().file.is_none(), "pack copy removed after install");
+    assert!(
+        s.pack.as_ref().unwrap().file.is_none(),
+        "pack copy removed after install"
+    );
     let mods = m.list_content(&inst.id).unwrap();
     println!("mods: {mods:?}");
     assert_eq!(mods.len(), 1);
     assert_eq!(mods[0].name, "Fabric API");
 
     boot_and_stop(&m, &inst.id).await;
-    assert!(m.console_lines(&inst.id).iter().any(|l| l.text.contains("fabric-api") || l.text.contains("Loading") ));
+    assert!(m
+        .console_lines(&inst.id)
+        .iter()
+        .any(|l| l.text.contains("fabric-api") || l.text.contains("Loading")));
 }
 
 /// The real Fabulously Optimized pack marks every file server-"required" but is a client pack.
@@ -254,14 +288,31 @@ async fn flags_client_only_modpacks() {
     let client = hearth_core::http::client();
     let versions: serde_json::Value = client
         .get("https://api.modrinth.com/v2/project/fabulously-optimized/version")
-        .send().await.unwrap().json().await.unwrap();
-    let url = versions[0]["files"].as_array().unwrap().iter().find(|f| f["primary"] == true).unwrap()["url"].as_str().unwrap().to_owned();
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let url = versions[0]["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["primary"] == true)
+        .unwrap()["url"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let pack = tmp.path().join("fo.mrpack");
     std::fs::write(&pack, client.get(url).send().await.unwrap().bytes().await.unwrap()).unwrap();
 
     let info = m.inspect_pack(&pack).await.unwrap();
     println!("{info:#?}");
-    assert!(info.warnings.iter().any(|w| w.contains("client-side modpack")), "{:?}", info.warnings);
+    assert!(
+        info.warnings.iter().any(|w| w.contains("client-side modpack")),
+        "{:?}",
+        info.warnings
+    );
     assert!(info.mod_count < 20, "client mods filtered out, got {}", info.mod_count);
     assert!(info.notes.iter().any(|n| n.contains("client-only")));
 }

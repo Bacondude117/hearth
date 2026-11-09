@@ -208,6 +208,8 @@ progress::-moz-progress-bar { background: var(--accent); }
 }
 .console-log { flex: 1; overflow-y: auto; padding: 12px 14px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
 .console-empty { color: #6f675f; }
+/* Older 100-line chunks are skipped by layout/paint until scrolled near (~19px per line). */
+.chunk.deferred { content-visibility: auto; contain-intrinsic-size: auto none auto 1940px; }
 .ln.system { color: #f4a261; }
 .ln.stderr, .ln.err { color: #ff7b72; }
 .ln.warn { color: #e3b341; }

@@ -74,7 +74,11 @@ pub struct PlayitApi {
 
 impl PlayitApi {
     pub fn new(client: reqwest::Client, secret: Option<String>) -> Self {
-        Self { client, base: API_BASE.into(), secret }
+        Self {
+            client,
+            base: API_BASE.into(),
+            secret,
+        }
     }
 
     async fn call<Req: Serialize, Res: DeserializeOwned>(&self, path: &str, req: &Req) -> Result<Res> {
@@ -107,7 +111,9 @@ impl PlayitApi {
         struct Key {
             secret_key: String,
         }
-        let k: Key = self.call("/claim/exchange", &serde_json::json!({ "code": code })).await?;
+        let k: Key = self
+            .call("/claim/exchange", &serde_json::json!({ "code": code }))
+            .await?;
         Ok(k.secret_key)
     }
 
@@ -133,7 +139,9 @@ impl PlayitApi {
     }
 
     pub async fn delete_tunnel(&self, tunnel_id: &str) -> Result<()> {
-        let _: serde_json::Value = self.call("/tunnels/delete", &serde_json::json!({ "tunnel_id": tunnel_id })).await?;
+        let _: serde_json::Value = self
+            .call("/tunnels/delete", &serde_json::json!({ "tunnel_id": tunnel_id }))
+            .await?;
         Ok(())
     }
 }
@@ -217,7 +225,11 @@ pub struct ConfigField {
 
 impl RunTunnel {
     pub fn local_port(&self) -> Option<u16> {
-        self.agent_config.fields.iter().find(|f| f.name == "local_port").and_then(|f| f.value.parse().ok())
+        self.agent_config
+            .fields
+            .iter()
+            .find(|f| f.name == "local_port")
+            .and_then(|f| f.value.parse().ok())
     }
 }
 
@@ -267,7 +279,13 @@ mod tests {
     /// The exact body that playit accepted in a real test (2026-11-09). playit rejects the
     /// `/v1/tunnels/create` shape with "failed to parse body"; `/tunnels/create` works.
     fn create_request_matches_what_playit_accepts() {
-        let r = create_tunnel_request("e05f684d-d21f-424d-a272-6828d10e60d7", Some("minecraft-java"), "tcp", 25599, "Hearth: S");
+        let r = create_tunnel_request(
+            "e05f684d-d21f-424d-a272-6828d10e60d7",
+            Some("minecraft-java"),
+            "tcp",
+            25599,
+            "Hearth: S",
+        );
         assert_eq!(
             r,
             serde_json::json!({

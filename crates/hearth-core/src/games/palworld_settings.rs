@@ -91,7 +91,10 @@ impl PalSettings {
 }
 
 fn unquote(v: &str) -> String {
-    v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(v).to_owned()
+    v.strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .unwrap_or(v)
+        .to_owned()
 }
 
 /// Splits on commas that are outside quotes and parentheses.
@@ -128,7 +131,10 @@ mod tests {
         assert_eq!(s.get("ServerDescription").as_deref(), Some(""));
         assert_eq!(s.get("CrossplayPlatforms").as_deref(), Some("(Steam,Xbox,PS5,Mac)"));
         assert_eq!(s.get("DenyTechnologyList").as_deref(), Some(""));
-        assert_eq!(s.get("ServerDescription2").as_deref(), Some("Fun, friendly (casual) server"));
+        assert_eq!(
+            s.get("ServerDescription2").as_deref(),
+            Some("Fun, friendly (casual) server")
+        );
         assert_eq!(s.entries().len(), 15);
     }
 
@@ -143,11 +149,17 @@ mod tests {
         assert_eq!(again.get("ServerName").as_deref(), Some("Ryker's, Pals"));
         assert_eq!(again.raw("ServerPlayerMaxNum"), Some("8"));
         assert_eq!(again.raw("RESTAPIEnabled"), Some("True"));
-        assert_eq!(again.raw("AdminPassword"), Some("\"abc123\""), "was quoted, stays quoted");
+        assert_eq!(
+            again.raw("AdminPassword"),
+            Some("\"abc123\""),
+            "was quoted, stays quoted"
+        );
         assert_eq!(again.get("CrossplayPlatforms").as_deref(), Some("(Steam,Xbox,PS5,Mac)"));
         let keys: Vec<String> = again.entries().into_iter().map(|(k, _)| k).collect();
         assert_eq!(keys[0], "Difficulty");
-        assert!(s.render().starts_with("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=("));
+        assert!(s
+            .render()
+            .starts_with("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=("));
     }
 
     #[test]

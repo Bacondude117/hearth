@@ -49,8 +49,14 @@ export function App() {
     void refresh();
     refreshPlayit();
     // Tunnel addresses come from playit's API; poll occasionally for state changes there.
-    const t = setInterval(refreshPlayit, 20000);
-    return () => clearInterval(t);
+    // Skip while Hearth is minimized or hidden; refresh as soon as it's visible again.
+    const t = setInterval(() => !document.hidden && refreshPlayit(), 20000);
+    const onVisible = () => !document.hidden && refreshPlayit();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh, refreshPlayit, toast]);
 
   useEffect(

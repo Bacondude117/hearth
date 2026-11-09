@@ -143,7 +143,10 @@ pub struct PlayerBook {
 
 impl PlayerBook {
     pub fn new(path: PathBuf) -> Self {
-        Self { path, lock: Mutex::new(()) }
+        Self {
+            path,
+            lock: Mutex::new(()),
+        }
     }
 
     pub fn load(&self) -> Vec<SeenPlayer> {
@@ -165,7 +168,11 @@ impl PlayerBook {
                 }
                 p.last_seen = Utc::now();
             }
-            None => all.push(SeenPlayer { name: name.to_owned(), id: id.map(str::to_owned), last_seen: Utc::now() }),
+            None => all.push(SeenPlayer {
+                name: name.to_owned(),
+                id: id.map(str::to_owned),
+                last_seen: Utc::now(),
+            }),
         }
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir).at(dir)?;
@@ -187,7 +194,10 @@ pub(crate) fn read_json_list<T: serde::de::DeserializeOwned>(path: &Path) -> Res
             detail: e.to_string(),
         }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
-        Err(e) => Err(Error::Io { path: path.to_path_buf(), source: e }),
+        Err(e) => Err(Error::Io {
+            path: path.to_path_buf(),
+            source: e,
+        }),
     }
 }
 
@@ -220,7 +230,11 @@ mod tests {
         let all = book.load();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "steve");
-        assert_eq!(all[0].id.as_deref(), Some("123"), "id survives a later record without one");
+        assert_eq!(
+            all[0].id.as_deref(),
+            Some("123"),
+            "id survives a later record without one"
+        );
     }
 
     #[test]
@@ -235,7 +249,10 @@ mod tests {
 
     #[test]
     fn reasons_are_single_line() {
-        assert_eq!(clean_reason(&Some("griefing\nop Bob".into())).as_deref(), Some("griefing op Bob"));
+        assert_eq!(
+            clean_reason(&Some("griefing\nop Bob".into())).as_deref(),
+            Some("griefing op Bob")
+        );
         assert_eq!(clean_reason(&Some("   ".into())), None);
     }
 }

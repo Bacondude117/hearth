@@ -13,7 +13,12 @@ fn spawn(mode: &str) -> (Arc<ServerProcess>, Arc<Console>, Arc<VecSink>) {
     let sink = Arc::new(VecSink::default());
     let console = Arc::new(Console::new("t-0001".into(), sink.clone()));
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fake_server.sh");
-    let spec = LaunchSpec { program: "bash".into(), args: vec![script.to_string_lossy().into(), mode.into()], cwd: std::env::temp_dir(), env: vec![] };
+    let spec = LaunchSpec {
+        program: "bash".into(),
+        args: vec![script.to_string_lossy().into(), mode.into()],
+        cwd: std::env::temp_dir(),
+        env: vec![],
+    };
     let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
     let p = ServerProcess::spawn("t-0001".into(), &spec, parser, "stop", console.clone(), sink.clone()).unwrap();
     (p, console, sink)
@@ -41,10 +46,16 @@ async fn becomes_running_and_stops_gracefully() {
     assert_eq!(p.status(), ServerStatus::Stopped);
     assert!(console.snapshot().iter().any(|l| l.text == "Stopping the server"));
 
-    let statuses: Vec<_> = sink.0.lock().unwrap().iter().filter_map(|e| match e {
-        Event::ServerStatus { status, .. } => Some(status.clone()),
-        _ => None,
-    }).collect();
+    let statuses: Vec<_> = sink
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            Event::ServerStatus { status, .. } => Some(status.clone()),
+            _ => None,
+        })
+        .collect();
     assert_eq!(statuses.first(), Some(&ServerStatus::Starting));
     assert!(statuses.contains(&ServerStatus::Running));
     assert!(statuses.contains(&ServerStatus::Stopping));
@@ -82,17 +93,31 @@ async fn force_kills_after_timeout() {
     let started = std::time::Instant::now();
     p.stop(Duration::from_millis(500)).await;
     assert!(started.elapsed() < Duration::from_secs(5));
-    assert_eq!(p.status(), ServerStatus::Stopped, "a requested stop is never reported as a crash");
-    assert!(console.snapshot().iter().any(|l| l.text.contains("forcing it to close")));
+    assert_eq!(
+        p.status(),
+        ServerStatus::Stopped,
+        "a requested stop is never reported as a crash"
+    );
+    assert!(console
+        .snapshot()
+        .iter()
+        .any(|l| l.text.contains("forcing it to close")));
 }
 
 #[tokio::test]
 async fn spawn_failure_is_a_readable_error() {
     let sink = Arc::new(VecSink::default());
     let console = Arc::new(Console::new("t".into(), sink.clone()));
-    let spec = LaunchSpec { program: "/definitely/not/here".into(), args: vec![], cwd: std::env::temp_dir(), env: vec![] };
+    let spec = LaunchSpec {
+        program: "/definitely/not/here".into(),
+        args: vec![],
+        cwd: std::env::temp_dir(),
+        env: vec![],
+    };
     let parser: LineParser = Arc::new(|_: &str| None);
-    let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink).err().unwrap();
+    let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink)
+        .err()
+        .unwrap();
     assert!(err.to_string().contains("Could not start the server"), "{err}");
 }
 

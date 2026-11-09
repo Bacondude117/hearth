@@ -112,7 +112,7 @@ impl InstanceStore {
                 Err(e) => tracing::warn!("skipping unreadable instance {}: {e}", f.display()),
             }
         }
-        out.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        out.sort_by_key(|a| a.created_at);
         Ok(out)
     }
 
@@ -152,13 +152,23 @@ impl InstanceStore {
     pub fn new_id(&self, name: &str) -> String {
         let mut slug: String = name
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
             .collect();
         while slug.contains("--") {
             slug = slug.replace("--", "-");
         }
         let slug = slug.trim_matches('-');
-        let slug: String = if slug.is_empty() { "server".into() } else { slug.chars().take(24).collect() };
+        let slug: String = if slug.is_empty() {
+            "server".into()
+        } else {
+            slug.chars().take(24).collect()
+        };
         loop {
             let suffix: u16 = rand::random();
             let id = format!("{}-{:04x}", slug.trim_end_matches('-'), suffix);

@@ -9,15 +9,15 @@ use serde::Deserialize;
 use super::mc_loaders::{self, Loader};
 use super::mc_packs;
 use super::{
-    compare_versions, Eula, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome,
-    LaunchSpec, LineEvent, Progress,
+    compare_versions, Eula, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome, LaunchSpec,
+    LineEvent, Progress,
 };
+use crate::content::ContentFolder;
 use crate::error::{Error, IoContext, Result};
 use crate::http::{self, Checksum};
-use crate::content::ContentFolder;
 use crate::instance::{Instance, JavaLaunch};
-use crate::packs::PackInfo;
 use crate::net::Protocol;
+use crate::packs::PackInfo;
 use crate::properties::Properties;
 
 const MOJANG_MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
@@ -119,7 +119,11 @@ pub(crate) fn vanilla_versions(m: &Manifest) -> Vec<GameVersion> {
     m.versions
         .iter()
         .filter(|v| v.kind == "release")
-        .map(|v| GameVersion { id: v.id.clone(), label: v.id.clone(), stable: true })
+        .map(|v| GameVersion {
+            id: v.id.clone(),
+            label: v.id.clone(),
+            stable: true,
+        })
         .collect()
 }
 
@@ -129,8 +133,16 @@ pub(crate) fn paper_versions(p: &PaperProject) -> Vec<GameVersion> {
     all.into_iter()
         .map(|v| {
             let stable = !v.contains('-');
-            let label = if stable { v.clone() } else { format!("{v} (pre-release)") };
-            GameVersion { id: v.clone(), label, stable }
+            let label = if stable {
+                v.clone()
+            } else {
+                format!("{v} (pre-release)")
+            };
+            GameVersion {
+                id: v.clone(),
+                label,
+                stable,
+            }
         })
         .collect()
 }
@@ -148,10 +160,26 @@ impl GameProvider for MinecraftJava {
                     name: "Paper",
                     description: "Faster than vanilla and supports Bukkit/Paper plugins. Recommended.",
                 },
-                FlavorInfo { id: "vanilla", name: "Vanilla", description: "Mojang's official server, unmodified." },
-                FlavorInfo { id: "fabric", name: "Fabric", description: "Lightweight mod loader. Most performance and utility mods." },
-                FlavorInfo { id: "neoforge", name: "NeoForge", description: "Mod loader for big content mods on newer versions." },
-                FlavorInfo { id: "forge", name: "Forge", description: "The classic mod loader. Needed for many older modpacks." },
+                FlavorInfo {
+                    id: "vanilla",
+                    name: "Vanilla",
+                    description: "Mojang's official server, unmodified.",
+                },
+                FlavorInfo {
+                    id: "fabric",
+                    name: "Fabric",
+                    description: "Lightweight mod loader. Most performance and utility mods.",
+                },
+                FlavorInfo {
+                    id: "neoforge",
+                    name: "NeoForge",
+                    description: "Mod loader for big content mods on newer versions.",
+                },
+                FlavorInfo {
+                    id: "forge",
+                    name: "Forge",
+                    description: "The classic mod loader. Needed for many older modpacks.",
+                },
             ],
             default_port: 25565,
             protocol: Protocol::Tcp,
@@ -200,14 +228,22 @@ impl GameProvider for MinecraftJava {
                 })?;
                 // Versions too old to declare one ran on Java 8.
                 let major = detail.java_version.map(|j| j.major).unwrap_or(8);
-                (server.url.clone(), Checksum::Sha1(server.sha1.clone()), major, None, vec![])
+                (
+                    server.url.clone(),
+                    Checksum::Sha1(server.sha1.clone()),
+                    major,
+                    None,
+                    vec![],
+                )
             }
             "paper" => {
                 let v: PaperVersion =
                     http::get_json(&ctx.client, &format!("{PAPER_API}/versions/{}", inst.version)).await?;
-                let b: PaperBuild =
-                    http::get_json(&ctx.client, &format!("{PAPER_API}/versions/{}/builds/latest", inst.version))
-                        .await?;
+                let b: PaperBuild = http::get_json(
+                    &ctx.client,
+                    &format!("{PAPER_API}/versions/{}/builds/latest", inst.version),
+                )
+                .await?;
                 let d = b.downloads.get("server:default").ok_or_else(|| Error::BadResponse {
                     source_name: "PaperMC".into(),
                     detail: "build has no server download".into(),
@@ -226,7 +262,10 @@ impl GameProvider for MinecraftJava {
         // Java first: it is the bigger download and a failure there should not leave a new jar.
         ctx.java.ensure(java_major, |stage, f| progress(stage, f)).await?;
 
-        http::download(&ctx.client, &url, &jar, &checksum, |f| progress("Downloading server", f)).await?;
+        http::download(&ctx.client, &url, &jar, &checksum, |f| {
+            progress("Downloading server", f)
+        })
+        .await?;
 
         finish_setup(inst, server_dir, fresh).await?;
         Ok(InstallOutcome {
@@ -245,7 +284,12 @@ impl GameProvider for MinecraftJava {
             .java
             .installed(major)
             .ok_or_else(|| Error::InvalidInput(format!("Java {major} is missing. Try reinstalling the server.")))?;
-        Ok(LaunchSpec { program: java, args: java_args(inst, server_dir), cwd: server_dir.to_path_buf(), env: vec![] })
+        Ok(LaunchSpec {
+            program: java,
+            args: java_args(inst, server_dir),
+            cwd: server_dir.to_path_buf(),
+            env: vec![],
+        })
     }
 
     fn parse_line(&self, line: &str) -> Option<LineEvent> {
@@ -273,8 +317,16 @@ impl GameProvider for MinecraftJava {
 
     fn content_folder(&self, inst: &Instance) -> Option<ContentFolder> {
         match inst.flavor.as_str() {
-            "paper" => Some(ContentFolder { label: "Plugins", folder: "plugins", extension: "jar" }),
-            f if Loader::from_flavor(f).is_some() => Some(ContentFolder { label: "Mods", folder: "mods", extension: "jar" }),
+            "paper" => Some(ContentFolder {
+                label: "Plugins",
+                folder: "plugins",
+                extension: "jar",
+            }),
+            f if Loader::from_flavor(f).is_some() => Some(ContentFolder {
+                label: "Mods",
+                folder: "mods",
+                extension: "jar",
+            }),
             _ => None,
         }
     }
@@ -315,14 +367,26 @@ pub(crate) fn java_args(inst: &Instance, server_dir: &Path) -> Vec<String> {
 async fn finish_setup(inst: &Instance, server_dir: &Path, fresh: bool) -> Result<()> {
     // The installer only runs after the user accepted the EULA in the UI.
     let eula = server_dir.join("eula.txt");
-    tokio::fs::write(&eula, "# Accepted in Hearth (https://aka.ms/MinecraftEULA)\neula=true\n")
-        .await
-        .at(&eula)?;
+    tokio::fs::write(
+        &eula,
+        "# Accepted in Hearth (https://aka.ms/MinecraftEULA)\neula=true\n",
+    )
+    .await
+    .at(&eula)?;
     if fresh {
         let path = server_dir.join("server.properties");
         let mut props = Properties::load(&path)?;
         props.set("server-port", inst.port.to_string());
-        if props.get("motd").is_none_or(|m| m.is_empty() || m == "A Minecraft Server") {
+        // Minecraft 26.x generates `white-list=true`; start new servers open (users can turn
+        // the whitelist on in Settings). Packs that ship their own value keep it.
+        if props.get("white-list").is_none() {
+            props.set("white-list", "false");
+            props.set("enforce-whitelist", "false");
+        }
+        if props
+            .get("motd")
+            .is_none_or(|m| m.is_empty() || m == "A Minecraft Server")
+        {
             props.set("motd", inst.name.clone());
         }
         props.save(&path)?;
@@ -366,8 +430,14 @@ async fn install_modded(
                 (JavaLaunch::Jar { jar }, v)
             }
             None => {
-                let v = mc_loaders::install_fabric(&ctx.client, &inst.version, pinned.as_deref(), dir, progress).await?;
-                (JavaLaunch::Jar { jar: mc_loaders::FABRIC_LAUNCHER.into() }, Some(v))
+                let v =
+                    mc_loaders::install_fabric(&ctx.client, &inst.version, pinned.as_deref(), dir, progress).await?;
+                (
+                    JavaLaunch::Jar {
+                        jar: mc_loaders::FABRIC_LAUNCHER.into(),
+                    },
+                    Some(v),
+                )
             }
         },
         Loader::Forge | Loader::NeoForge => {
@@ -376,9 +446,15 @@ async fn install_modded(
                 let installer = match mc_loaders::find_installer_jar(dir) {
                     Some(p) => p,
                     None => {
-                        let (p, v) =
-                            mc_loaders::download_installer(&ctx.client, loader, &inst.version, pinned.as_deref(), dir, progress)
-                                .await?;
+                        let (p, v) = mc_loaders::download_installer(
+                            &ctx.client,
+                            loader,
+                            &inst.version,
+                            pinned.as_deref(),
+                            dir,
+                            progress,
+                        )
+                        .await?;
                         version = Some(v);
                         p
                     }
@@ -405,9 +481,13 @@ async fn install_modded(
         if let Some(server) = detail.downloads.get("server") {
             let jar = dir.join(".fabric/server").join(format!("{}-server.jar", inst.version));
             if !jar.exists() {
-                http::download(&ctx.client, &server.url, &jar, &Checksum::Sha1(server.sha1.clone()), |f| {
-                    progress("Downloading Minecraft server", f)
-                })
+                http::download(
+                    &ctx.client,
+                    &server.url,
+                    &jar,
+                    &Checksum::Sha1(server.sha1.clone()),
+                    |f| progress("Downloading Minecraft server", f),
+                )
                 .await?;
             }
         }
@@ -523,8 +603,53 @@ mod tests {
             Some(LineEvent::PlayerJoined(".GeyserFriend".into()))
         );
         // Other lines around a join must not count.
-        assert_eq!(parse_java_line("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
-        assert_eq!(parse_java_line("[22:53:06 INFO]: System chat: There are 1 of a max of 20 players online: Bacon_Dude117"), None);
+        assert_eq!(
+            parse_java_line("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"),
+            None
+        );
+        assert_eq!(
+            parse_java_line("[22:53:06 INFO]: System chat: There are 1 of a max of 20 players online: Bacon_Dude117"),
+            None
+        );
+    }
+
+    fn test_instance() -> Instance {
+        Instance {
+            id: "t-0001".into(),
+            name: "Fresh".into(),
+            game: "minecraft-java".into(),
+            flavor: "paper".into(),
+            version: "26.3".into(),
+            installed_build: None,
+            port: 25570,
+            memory_mb: Some(2048),
+            java_major: Some(25),
+            jvm_args: vec![],
+            install_state: crate::instance::InstallState::Installed,
+            created_at: chrono::Utc::now(),
+            playit_tunnel_id: None,
+            launch: None,
+            pack: None,
+        }
+    }
+
+    /// Minecraft 26.x generates `white-list=true` by default; new Hearth servers start open.
+    #[tokio::test]
+    async fn new_servers_start_with_the_whitelist_off() {
+        let t = tempfile::tempdir().unwrap();
+        finish_setup(&test_instance(), t.path(), true).await.unwrap();
+        let p = Properties::load(&t.path().join("server.properties")).unwrap();
+        assert_eq!(p.get("white-list"), Some("false"));
+        assert_eq!(p.get("enforce-whitelist"), Some("false"));
+        assert_eq!(p.get("server-port"), Some("25570"));
+
+        // Reinstalls/updates don't touch the user's choice.
+        let mut p = p;
+        p.set("white-list", "true");
+        p.save(&t.path().join("server.properties")).unwrap();
+        finish_setup(&test_instance(), t.path(), false).await.unwrap();
+        let p = Properties::load(&t.path().join("server.properties")).unwrap();
+        assert_eq!(p.get("white-list"), Some("true"));
     }
 
     #[test]
@@ -533,18 +658,36 @@ mod tests {
             parse_java_line("[00:28:08] [Server thread/ERROR]: This crash report has been saved to: C:\\x\\crash.txt"),
             Some(LineEvent::Crashed)
         );
-        assert_eq!(parse_java_line("[00:28:08 ERROR]: Encountered an unexpected exception"), Some(LineEvent::Crashed));
-        assert_eq!(parse_java_line("[00:28:08 INFO]: <bob> Encountered an unexpected exception"), None);
+        assert_eq!(
+            parse_java_line("[00:28:08 ERROR]: Encountered an unexpected exception"),
+            Some(LineEvent::Crashed)
+        );
+        assert_eq!(
+            parse_java_line("[00:28:08 INFO]: <bob> Encountered an unexpected exception"),
+            None
+        );
     }
 
     #[test]
     fn parses_identity_lines() {
         assert_eq!(
-            MinecraftJava.parse_identity("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"),
-            Some(("Bacon_Dude117".into(), Some("33f7864d-a02c-4e21-ae28-3ecf6f0fd767".into())))
+            MinecraftJava.parse_identity(
+                "[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"
+            ),
+            Some((
+                "Bacon_Dude117".into(),
+                Some("33f7864d-a02c-4e21-ae28-3ecf6f0fd767".into())
+            ))
         );
-        assert_eq!(MinecraftJava.parse_identity("[22:52:49 INFO]: <bob> UUID of player Eve is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
-        assert_eq!(MinecraftJava.parse_identity("[22:52:49 INFO]: UUID of player Eve is nope"), None);
+        assert_eq!(
+            MinecraftJava
+                .parse_identity("[22:52:49 INFO]: <bob> UUID of player Eve is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"),
+            None
+        );
+        assert_eq!(
+            MinecraftJava.parse_identity("[22:52:49 INFO]: UUID of player Eve is nope"),
+            None
+        );
     }
 
     #[test]
@@ -563,8 +706,17 @@ mod tests {
         );
         // Chat spoofing.
         assert_eq!(parse_java_line("[12:01:00 INFO]: <bob> Steve joined the game"), None);
-        assert_eq!(parse_java_line("[12:01:00 INFO]: <bob> System chat: Steve joined the game"), None);
-        assert_eq!(parse_java_line("[12:01:00 INFO]: [Not Secure] <bob> System chat: Steve joined the game"), None);
-        assert_eq!(parse_java_line("[12:01:00 INFO]: Starting minecraft server version 26.3"), None);
+        assert_eq!(
+            parse_java_line("[12:01:00 INFO]: <bob> System chat: Steve joined the game"),
+            None
+        );
+        assert_eq!(
+            parse_java_line("[12:01:00 INFO]: [Not Secure] <bob> System chat: Steve joined the game"),
+            None
+        );
+        assert_eq!(
+            parse_java_line("[12:01:00 INFO]: Starting minecraft server version 26.3"),
+            None
+        );
     }
 }

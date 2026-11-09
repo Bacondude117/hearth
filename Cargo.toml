@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/hearth-core", "src-tauri"]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 license = "MIT"
 
@@ -13,3 +13,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
+
+# Smaller, faster release builds of the desktop app.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

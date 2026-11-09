@@ -18,10 +18,11 @@ pub enum Event {
         instance_id: String,
         error: Option<String>,
     },
+    /// New console lines, batched (a chatty server would otherwise send one event per line).
     #[serde(rename_all = "camelCase")]
     ServerLog {
         instance_id: String,
-        line: LogLine,
+        lines: Vec<LogLine>,
     },
     #[serde(rename_all = "camelCase")]
     ServerStatus {

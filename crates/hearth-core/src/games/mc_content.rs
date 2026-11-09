@@ -22,7 +22,8 @@ fn toml_value(text: &str, key: &str) -> Option<String> {
 fn yaml_value(text: &str, key: &str) -> Option<String> {
     text.lines().find_map(|l| {
         let (k, v) = l.split_once(':')?;
-        (k.trim() == key && !l.starts_with([' ', '\t'])).then(|| v.trim().trim_matches(|c| c == '"' || c == '\'').to_owned())
+        (k.trim() == key && !l.starts_with([' ', '\t']))
+            .then(|| v.trim().trim_matches(|c| c == '"' || c == '\'').to_owned())
     })
 }
 
@@ -38,9 +39,15 @@ pub fn describe_jar(path: &Path) -> Option<(String, Option<String>)> {
 
     if let Some(j) = read(&mut z, "fabric.mod.json").or_else(|| read(&mut z, "quilt.mod.json")) {
         let v: serde_json::Value = serde_json::from_str(&j).ok()?;
-        let meta = v.get("quilt_loader").map(|q| q.get("metadata").unwrap_or(q)).unwrap_or(&v);
+        let meta = v
+            .get("quilt_loader")
+            .map(|q| q.get("metadata").unwrap_or(q))
+            .unwrap_or(&v);
         let name = meta.get("name").or_else(|| v.get("id")).and_then(|n| n.as_str())?;
-        let version = v.get("version").or_else(|| v.pointer("/quilt_loader/version")).and_then(|n| n.as_str());
+        let version = v
+            .get("version")
+            .or_else(|| v.pointer("/quilt_loader/version"))
+            .and_then(|n| n.as_str());
         return Some((name.to_owned(), clean(version.map(str::to_owned))));
     }
     for toml in ["META-INF/neoforge.mods.toml", "META-INF/mods.toml"] {
@@ -78,7 +85,14 @@ mod tests {
     fn reads_each_metadata_format() {
         let t = tempfile::tempdir().unwrap();
         let d = t.path();
-        let f = jar(d, "a.jar", &[("fabric.mod.json", r#"{"id":"sodium","name":"Sodium","version":"0.6.0+mc26.3"}"#)]);
+        let f = jar(
+            d,
+            "a.jar",
+            &[(
+                "fabric.mod.json",
+                r#"{"id":"sodium","name":"Sodium","version":"0.6.0+mc26.3"}"#,
+            )],
+        );
         assert_eq!(describe_jar(&f), Some(("Sodium".into(), Some("0.6.0+mc26.3".into()))));
 
         let f = jar(d, "b.jar", &[
@@ -87,7 +101,14 @@ mod tests {
         ]);
         assert_eq!(describe_jar(&f), Some(("Create".into(), Some("6.0.4".into()))));
 
-        let f = jar(d, "c.jar", &[("plugin.yml", "name: EssentialsX\nversion: 2.21.0\nmain: com.earth2me.Essentials\ncommands:\n  name: nope\n")]);
+        let f = jar(
+            d,
+            "c.jar",
+            &[(
+                "plugin.yml",
+                "name: EssentialsX\nversion: 2.21.0\nmain: com.earth2me.Essentials\ncommands:\n  name: nope\n",
+            )],
+        );
         assert_eq!(describe_jar(&f), Some(("EssentialsX".into(), Some("2.21.0".into()))));
 
         let f = jar(d, "d.jar", &[("readme.txt", "")]);

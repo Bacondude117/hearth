@@ -14,8 +14,7 @@ use super::GameContext;
 use crate::error::{Error, Result};
 use crate::http;
 use crate::players::{
-    clean_reason, read_json_list, write_json_list, PlayerAction, PlayerAdmin, PlayerCaps, PlayerEntry, Role,
-    SeenPlayer,
+    clean_reason, read_json_list, write_json_list, PlayerAction, PlayerAdmin, PlayerCaps, PlayerEntry, Role, SeenPlayer,
 };
 use crate::properties::Properties;
 
@@ -108,7 +107,9 @@ async fn resolve(ctx: &GameContext, dir: &Path, name: &str) -> Result<(String, S
     }
     let resp = ctx.client.get(format!("{MOJANG_PROFILE_API}/{name}")).send().await?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND || resp.status() == reqwest::StatusCode::NO_CONTENT {
-        return Err(Error::InvalidInput(format!("There's no Minecraft account named \"{name}\".")));
+        return Err(Error::InvalidInput(format!(
+            "There's no Minecraft account named \"{name}\"."
+        )));
     }
     let p: Profile = resp.error_for_status()?.json().await?;
     let id = hyphenate(&p.id).ok_or_else(|| Error::BadResponse {
@@ -121,7 +122,11 @@ async fn resolve(ctx: &GameContext, dir: &Path, name: &str) -> Result<(String, S
 fn upsert(path: &Path, uuid: &str, name: &str, extra: BTreeMap<String, serde_json::Value>) -> Result<()> {
     let mut list: Vec<Entry> = read_json_list(path)?;
     list.retain(|e| !same(&e.name, name) && !(e.uuid == uuid && !uuid.is_empty()));
-    list.push(Entry { uuid: uuid.to_owned(), name: name.to_owned(), extra });
+    list.push(Entry {
+        uuid: uuid.to_owned(),
+        name: name.to_owned(),
+        extra,
+    });
     write_json_list(path, &list)
 }
 
@@ -189,16 +194,27 @@ impl PlayerAdmin for JavaPlayers {
                 let ban = bans.iter().find(|e| same(&e.name, &name));
                 PlayerEntry {
                     online: online.iter().any(|o| same(o, &name)),
-                    role: if ops.iter().any(|e| same(&e.name, &name)) { Role::Operator } else { Role::Player },
+                    role: if ops.iter().any(|e| same(&e.name, &name)) {
+                        Role::Operator
+                    } else {
+                        Role::Player
+                    },
                     whitelisted: wl.iter().any(|e| same(&e.name, &name)),
                     banned: ban.is_some(),
-                    ban_reason: ban.and_then(|b| b.extra.get("reason")).and_then(|r| r.as_str()).map(str::to_owned),
+                    ban_reason: ban
+                        .and_then(|b| b.extra.get("reason"))
+                        .and_then(|r| r.as_str())
+                        .map(str::to_owned),
                     name,
                     id,
                 }
             })
             .collect();
-        out.sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        out.sort_by(|a, b| {
+            b.online
+                .cmp(&a.online)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         Ok(out)
     }
 
@@ -319,10 +335,18 @@ mod tests {
     fn lists_everyone_with_their_state() {
         let tmp = tempfile::tempdir().unwrap();
         sample_server(tmp.path());
-        let seen = vec![SeenPlayer { name: "Newbie".into(), id: None, last_seen: chrono::Utc::now() }];
+        let seen = vec![SeenPlayer {
+            name: "Newbie".into(),
+            id: None,
+            last_seen: chrono::Utc::now(),
+        }];
         let list = JavaPlayers.list(tmp.path(), &["Alex".into()], &seen).unwrap();
         let names: Vec<_> = list.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, vec!["Alex", "Bacon_Dude117", "Griefer", "Newbie"], "online first, then by name");
+        assert_eq!(
+            names,
+            vec!["Alex", "Bacon_Dude117", "Griefer", "Newbie"],
+            "online first, then by name"
+        );
         let alex = &list[0];
         assert!(alex.online);
         assert_eq!(alex.role, Role::Player);
@@ -342,11 +366,23 @@ mod tests {
         assert_eq!(c(PlayerAction::SetRole { role: Role::Player }), "deop Alex");
         assert_eq!(c(PlayerAction::Whitelist { on: true }), "whitelist add Alex");
         assert_eq!(c(PlayerAction::Whitelist { on: false }), "whitelist remove Alex");
-        assert_eq!(c(PlayerAction::Ban { reason: Some("x-ray\nop me".into()) }), "ban Alex x-ray op me");
+        assert_eq!(
+            c(PlayerAction::Ban {
+                reason: Some("x-ray\nop me".into())
+            }),
+            "ban Alex x-ray op me"
+        );
         assert_eq!(c(PlayerAction::Unban), "pardon Alex");
         assert_eq!(c(PlayerAction::Kick { reason: None }), "kick Alex");
-        assert_eq!(c(PlayerAction::GameMode { mode: "creative".into() }), "gamemode creative Alex");
-        assert!(JavaPlayers.commands("Alex", &PlayerAction::GameMode { mode: "god".into() }).is_err());
+        assert_eq!(
+            c(PlayerAction::GameMode {
+                mode: "creative".into()
+            }),
+            "gamemode creative Alex"
+        );
+        assert!(JavaPlayers
+            .commands("Alex", &PlayerAction::GameMode { mode: "god".into() })
+            .is_err());
     }
 
     #[test]
@@ -364,22 +400,52 @@ mod tests {
         sample_server(dir);
         let ctx = ctx(dir);
 
-        JavaPlayers.apply_offline(&ctx, dir, "alex", &[], &PlayerAction::SetRole { role: Role::Operator }).await.unwrap();
-        JavaPlayers.apply_offline(&ctx, dir, "Alex", &[], &PlayerAction::Whitelist { on: true }).await.unwrap();
-        JavaPlayers.apply_offline(&ctx, dir, "Bacon_Dude117", &[], &PlayerAction::SetRole { role: Role::Player }).await.unwrap();
-        JavaPlayers.apply_offline(&ctx, dir, "Griefer", &[], &PlayerAction::Unban).await.unwrap();
         JavaPlayers
-            .apply_offline(&ctx, dir, "Alex", &[], &PlayerAction::Ban { reason: Some("testing".into()) })
+            .apply_offline(&ctx, dir, "alex", &[], &PlayerAction::SetRole { role: Role::Operator })
+            .await
+            .unwrap();
+        JavaPlayers
+            .apply_offline(&ctx, dir, "Alex", &[], &PlayerAction::Whitelist { on: true })
+            .await
+            .unwrap();
+        JavaPlayers
+            .apply_offline(
+                &ctx,
+                dir,
+                "Bacon_Dude117",
+                &[],
+                &PlayerAction::SetRole { role: Role::Player },
+            )
+            .await
+            .unwrap();
+        JavaPlayers
+            .apply_offline(&ctx, dir, "Griefer", &[], &PlayerAction::Unban)
+            .await
+            .unwrap();
+        JavaPlayers
+            .apply_offline(
+                &ctx,
+                dir,
+                "Alex",
+                &[],
+                &PlayerAction::Ban {
+                    reason: Some("testing".into()),
+                },
+            )
             .await
             .unwrap();
 
         let ops: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(OPS)).unwrap()).unwrap();
         assert_eq!(ops.as_array().unwrap().len(), 1);
-        assert_eq!(ops[0]["name"], "Alex", "canonical name from usercache, not the typed casing");
+        assert_eq!(
+            ops[0]["name"], "Alex",
+            "canonical name from usercache, not the typed casing"
+        );
         assert_eq!(ops[0]["uuid"], "6ab43178-89fd-4905-97f6-0f67d9d76fd9");
         assert_eq!(ops[0]["level"], 4);
 
-        let wl: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(WHITELIST)).unwrap()).unwrap();
+        let wl: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(WHITELIST)).unwrap()).unwrap();
         assert_eq!(wl[0]["uuid"], "6ab43178-89fd-4905-97f6-0f67d9d76fd9");
 
         let bans: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(BANS)).unwrap()).unwrap();
@@ -404,7 +470,8 @@ mod tests {
             .apply_offline(&ctx(dir), dir, "Notch", &[], &PlayerAction::Whitelist { on: true })
             .await
             .unwrap();
-        let wl: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(WHITELIST)).unwrap()).unwrap();
+        let wl: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(WHITELIST)).unwrap()).unwrap();
         assert_eq!(wl[0]["uuid"], offline_uuid("Notch"));
     }
 

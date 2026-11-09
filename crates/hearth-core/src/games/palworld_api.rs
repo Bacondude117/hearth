@@ -39,7 +39,11 @@ impl PalApi {
             .connect_timeout(Duration::from_secs(2))
             .build()
             .expect("static reqwest config is valid");
-        Self { client, base: format!("http://127.0.0.1:{port}/v1/api"), password: password.to_owned() }
+        Self {
+            client,
+            base: format!("http://127.0.0.1:{port}/v1/api"),
+            password: password.to_owned(),
+        }
     }
 
     async fn send(&self, req: reqwest::RequestBuilder) -> Result<reqwest::Response> {
@@ -53,12 +57,17 @@ impl PalApi {
     }
 
     pub async fn players(&self) -> Result<Vec<PalPlayer>> {
-        let r: PlayersResponse = self.send(self.client.get(format!("{}/players", self.base))).await?.json().await?;
+        let r: PlayersResponse = self
+            .send(self.client.get(format!("{}/players", self.base)))
+            .await?
+            .json()
+            .await?;
         Ok(r.players)
     }
 
     async fn post(&self, path: &str, body: serde_json::Value) -> Result<()> {
-        self.send(self.client.post(format!("{}/{path}", self.base)).json(&body)).await?;
+        self.send(self.client.post(format!("{}/{path}", self.base)).json(&body))
+            .await?;
         Ok(())
     }
 
@@ -67,7 +76,11 @@ impl PalApi {
     }
 
     pub async fn shutdown(&self, wait_secs: u32, message: &str) -> Result<()> {
-        self.post("shutdown", serde_json::json!({ "waittime": wait_secs, "message": message })).await
+        self.post(
+            "shutdown",
+            serde_json::json!({ "waittime": wait_secs, "message": message }),
+        )
+        .await
     }
 
     pub async fn announce(&self, message: &str) -> Result<()> {
@@ -75,11 +88,13 @@ impl PalApi {
     }
 
     pub async fn kick(&self, user_id: &str, message: &str) -> Result<()> {
-        self.post("kick", serde_json::json!({ "userid": user_id, "message": message })).await
+        self.post("kick", serde_json::json!({ "userid": user_id, "message": message }))
+            .await
     }
 
     pub async fn ban(&self, user_id: &str, message: &str) -> Result<()> {
-        self.post("ban", serde_json::json!({ "userid": user_id, "message": message })).await
+        self.post("ban", serde_json::json!({ "userid": user_id, "message": message }))
+            .await
     }
 
     pub async fn unban(&self, user_id: &str) -> Result<()> {
@@ -120,7 +135,11 @@ mod tests {
                 if let Some((head, body)) = req.split_once("\r\n\r\n") {
                     let len = head
                         .lines()
-                        .find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
                         .unwrap_or(0);
                     if body.len() >= len {
                         break;
@@ -140,8 +159,16 @@ mod tests {
         let req = h.join().unwrap();
         assert!(req.starts_with("POST /v1/api/kick "), "{req}");
         // base64("admin:s3cret")
-        assert!(req.contains("authorization: Basic YWRtaW46czNjcmV0") || req.contains("Authorization: Basic YWRtaW46czNjcmV0"), "{req}");
-        assert!(req.ends_with(r#"{"message":"bye","userid":"steam_1"}"#) || req.ends_with(r#"{"userid":"steam_1","message":"bye"}"#), "{req}");
+        assert!(
+            req.contains("authorization: Basic YWRtaW46czNjcmV0")
+                || req.contains("Authorization: Basic YWRtaW46czNjcmV0"),
+            "{req}"
+        );
+        assert!(
+            req.ends_with(r#"{"message":"bye","userid":"steam_1"}"#)
+                || req.ends_with(r#"{"userid":"steam_1","message":"bye"}"#),
+            "{req}"
+        );
     }
 
     #[tokio::test]

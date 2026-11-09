@@ -16,7 +16,12 @@ use crate::http::{self, Checksum};
 use crate::packs::{PackInfo, PackKind};
 
 /// Hosts a `.mrpack` may download from (Modrinth's format rules).
-const MRPACK_HOSTS: &[&str] = &["cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "gitlab.com"];
+const MRPACK_HOSTS: &[&str] = &[
+    "cdn.modrinth.com",
+    "github.com",
+    "raw.githubusercontent.com",
+    "gitlab.com",
+];
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 const PARALLEL_DOWNLOADS: usize = 6;
 /// How many bundled mod jars to open when guessing the loader from metadata.
@@ -62,7 +67,11 @@ fn mr_loader(deps: &HashMap<String, String>) -> Result<(Option<Loader>, Option<S
             "This is a Quilt modpack. Hearth supports Fabric, Forge and NeoForge packs.".into(),
         ));
     }
-    for (key, loader) in [("fabric-loader", Loader::Fabric), ("neoforge", Loader::NeoForge), ("forge", Loader::Forge)] {
+    for (key, loader) in [
+        ("fabric-loader", Loader::Fabric),
+        ("neoforge", Loader::NeoForge),
+        ("forge", Loader::Forge),
+    ] {
         if let Some(v) = deps.get(key) {
             return Ok((Some(loader), Some(v.clone())));
         }
@@ -76,7 +85,10 @@ pub(crate) fn inspect_mrpack_index(index: &MrIndex) -> Result<PackInfo> {
     let skipped = index.files.len() - server.len();
     let mut notes = vec![];
     if skipped > 0 {
-        notes.push(format!("{skipped} client-only file{} will be skipped.", if skipped == 1 { "" } else { "s" }));
+        notes.push(format!(
+            "{skipped} client-only file{} will be skipped.",
+            if skipped == 1 { "" } else { "s" }
+        ));
     }
     let mut warnings = vec![];
     for f in &server {
@@ -120,7 +132,10 @@ struct ProjectRef {
 
 /// sha512 -> the file's Modrinth project `server_side` ("required", "optional", "unsupported",
 /// "unknown"). Files Modrinth doesn't know are absent.
-pub(crate) async fn modrinth_server_sides(client: &reqwest::Client, files: &[&MrFile]) -> Result<HashMap<String, String>> {
+pub(crate) async fn modrinth_server_sides(
+    client: &reqwest::Client,
+    files: &[&MrFile],
+) -> Result<HashMap<String, String>> {
     let hashes: Vec<&String> = files.iter().filter_map(|f| f.hashes.get("sha512")).collect();
     if hashes.is_empty() {
         return Ok(HashMap::new());
@@ -155,15 +170,25 @@ pub(crate) async fn modrinth_server_sides(client: &reqwest::Client, files: &[&Mr
 }
 
 /// Splits files into those to install and the names of those Modrinth says can't run on a server.
-pub(crate) fn split_by_server_support<'a>(files: Vec<&'a MrFile>, sides: &HashMap<String, String>) -> (Vec<&'a MrFile>, Vec<String>) {
+pub(crate) fn split_by_server_support<'a>(
+    files: Vec<&'a MrFile>,
+    sides: &HashMap<String, String>,
+) -> (Vec<&'a MrFile>, Vec<String>) {
     let mut skipped = vec![];
     let kept = files
         .into_iter()
         .filter(|f| {
-            let unsupported = f.hashes.get("sha512").and_then(|h| sides.get(h)).is_some_and(|s| s == "unsupported");
+            let unsupported = f
+                .hashes
+                .get("sha512")
+                .and_then(|h| sides.get(h))
+                .is_some_and(|s| s == "unsupported");
             if unsupported {
                 skipped.push(
-                    Path::new(&f.path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| f.path.clone()),
+                    Path::new(&f.path)
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| f.path.clone()),
                 );
             }
             !unsupported
@@ -195,7 +220,14 @@ async fn modrinth_pack_project(client: &reqwest::Client, file: &Path) -> Option<
         .json()
         .await
         .ok()?;
-    let p: ProjectRef = client.get(format!("{MODRINTH_API}/project/{}", v.project_id)).send().await.ok()?.json().await.ok()?;
+    let p: ProjectRef = client
+        .get(format!("{MODRINTH_API}/project/{}", v.project_id))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
     Some((p.title, p.server_side))
 }
 
@@ -219,7 +251,10 @@ async fn enrich_mrpack_info(client: &reqwest::Client, file: &Path, index: &MrInd
         }
         Err(e) => {
             tracing::warn!("Modrinth lookup failed: {e}");
-            info.notes.push("Couldn't reach Modrinth to double-check which mods are client-only; using the pack's own labels.".into());
+            info.notes.push(
+                "Couldn't reach Modrinth to double-check which mods are client-only; using the pack's own labels."
+                    .into(),
+            );
         }
     }
     if let Some((title, side)) = modrinth_pack_project(client, file).await {
@@ -252,12 +287,25 @@ fn safe_rel_path(p: &str) -> bool {
 
 fn validate_mr_file(f: &MrFile) -> Result<()> {
     if !safe_rel_path(&f.path) {
-        return Err(Error::InvalidInput(format!("Refusing unsafe file path in pack: {}", f.path)));
+        return Err(Error::InvalidInput(format!(
+            "Refusing unsafe file path in pack: {}",
+            f.path
+        )));
     }
-    let url = f.downloads.first().ok_or_else(|| Error::InvalidInput(format!("{} has no download link.", f.path)))?;
-    let host = reqwest::Url::parse(url).ok().and_then(|u| (u.scheme() == "https").then(|| u.host_str().map(str::to_owned)).flatten());
+    let url = f
+        .downloads
+        .first()
+        .ok_or_else(|| Error::InvalidInput(format!("{} has no download link.", f.path)))?;
+    let host = reqwest::Url::parse(url).ok().and_then(|u| {
+        (u.scheme() == "https")
+            .then(|| u.host_str().map(str::to_owned))
+            .flatten()
+    });
     if !host.as_deref().is_some_and(|h| MRPACK_HOSTS.contains(&h)) {
-        return Err(Error::InvalidInput(format!("Refusing download from an unapproved site for {}.", f.path)));
+        return Err(Error::InvalidInput(format!(
+            "Refusing download from an unapproved site for {}.",
+            f.path
+        )));
     }
     if !f.hashes.contains_key("sha512") && !f.hashes.contains_key("sha1") {
         return Err(Error::InvalidInput(format!("{} has no checksum.", f.path)));
@@ -285,24 +333,24 @@ async fn unpack_mrpack(ctx: &GameContext, file: &Path, dir: &Path, progress: Pro
     let jobs: Vec<Job<'_>> = files
         .iter()
         .map(|f| -> Job<'_> {
-        let done = &done;
-        Box::pin(async move {
-            let checksum = match (f.hashes.get("sha512"), f.hashes.get("sha1")) {
-                (Some(h), _) => Checksum::Sha512(h.clone()),
-                (None, Some(h)) => Checksum::Sha1(h.clone()),
-                _ => Checksum::None,
-            };
-            let r = http::download(&ctx.client, &f.downloads[0], &dir.join(&f.path), &checksum, |_| {}).await;
-            let n = done.fetch_add(1, Ordering::SeqCst) + 1;
-            progress("Downloading mods", Some(n as f64 / total as f64));
-            r.map_err(|e| Error::InvalidInput(format!("Couldn't download {}: {e}", f.path)))
+            let done = &done;
+            Box::pin(async move {
+                let checksum = match (f.hashes.get("sha512"), f.hashes.get("sha1")) {
+                    (Some(h), _) => Checksum::Sha512(h.clone()),
+                    (None, Some(h)) => Checksum::Sha1(h.clone()),
+                    _ => Checksum::None,
+                };
+                let r = http::download(&ctx.client, &f.downloads[0], &dir.join(&f.path), &checksum, |_| {}).await;
+                let n = done.fetch_add(1, Ordering::SeqCst) + 1;
+                progress("Downloading mods", Some(n as f64 / total as f64));
+                r.map_err(|e| Error::InvalidInput(format!("Couldn't download {}: {e}", f.path)))
+            })
         })
-    })
         .collect();
     let results: Vec<Result<()>> = futures_util::stream::iter(jobs)
-    .buffer_unordered(PARALLEL_DOWNLOADS)
-    .collect()
-    .await;
+        .buffer_unordered(PARALLEL_DOWNLOADS)
+        .collect()
+        .await;
     results.into_iter().collect::<Result<Vec<()>>>()?;
 
     progress("Copying pack files", None);
@@ -322,11 +370,17 @@ async fn unpack_mrpack(ctx: &GameContext, file: &Path, dir: &Path, progress: Pro
 /// Entry names with the zip's single top-level folder (if any) removed.
 fn entry_names(z: &mut zip::ZipArchive<std::fs::File>) -> Vec<(usize, String)> {
     let raw: Vec<(usize, String)> = (0..z.len())
-        .filter_map(|i| z.by_index(i).ok().and_then(|e| e.enclosed_name().map(|n| (i, n.to_string_lossy().replace('\\', "/")))))
+        .filter_map(|i| {
+            z.by_index(i)
+                .ok()
+                .and_then(|e| e.enclosed_name().map(|n| (i, n.to_string_lossy().replace('\\', "/"))))
+        })
         .collect();
     let first = |s: &str| s.split('/').next().unwrap_or("").to_owned();
     let root = raw.first().map(|(_, n)| first(n));
-    let single_root = root.as_ref().is_some_and(|r| raw.iter().all(|(_, n)| first(n) == *r && n.len() > r.len()));
+    let single_root = root
+        .as_ref()
+        .is_some_and(|r| raw.iter().all(|(_, n)| first(n) == *r && n.len() > r.len()));
     raw.into_iter()
         .map(|(i, n)| match (&root, single_root) {
             (Some(r), true) => (i, n[r.len()..].trim_start_matches('/').to_owned()),
@@ -390,7 +444,10 @@ pub(crate) fn inspect_server_zip(file: &Path) -> Result<PackInfo> {
     };
 
     // 1. Forge/NeoForge already installed.
-    if let Some((_, n)) = names.iter().find(|(_, n)| n.starts_with("libraries/") && (n.ends_with("/win_args.txt") || n.ends_with("/unix_args.txt"))) {
+    if let Some((_, n)) = names
+        .iter()
+        .find(|(_, n)| n.starts_with("libraries/") && (n.ends_with("/win_args.txt") || n.ends_with("/unix_args.txt")))
+    {
         if let Some((l, m, v)) = mc_loaders::parse_args_path(n) {
             fill(Some(l), m, Some(v));
         }
@@ -402,7 +459,9 @@ pub(crate) fn inspect_server_zip(file: &Path) -> Result<PackInfo> {
         .map(|(i, _)| *i)
         .collect();
     for i in installers {
-        if let Some((l, m, v)) = read_entry(&mut z, i, 50 << 20).and_then(|b| mc_loaders::read_install_profile_from_jar(&b)) {
+        if let Some((l, m, v)) =
+            read_entry(&mut z, i, 50 << 20).and_then(|b| mc_loaders::read_install_profile_from_jar(&b))
+        {
             fill(Some(l), Some(m), Some(v));
         }
     }
@@ -424,15 +483,23 @@ pub(crate) fn inspect_server_zip(file: &Path) -> Result<PackInfo> {
                 Some("forge") => Some(Loader::Forge),
                 Some("neoforge") => Some(Loader::NeoForge),
                 Some("quilt") => {
-                    return Err(Error::InvalidInput("This is a Quilt server pack. Hearth supports Fabric, Forge and NeoForge.".into()))
+                    return Err(Error::InvalidInput(
+                        "This is a Quilt server pack. Hearth supports Fabric, Forge and NeoForge.".into(),
+                    ))
                 }
                 _ => None,
             };
-            fill(l, vars.get("MINECRAFT_VERSION").cloned(), vars.get("MODLOADER_VERSION").cloned());
+            fill(
+                l,
+                vars.get("MINECRAFT_VERSION").cloned(),
+                vars.get("MODLOADER_VERSION").cloned(),
+            );
         }
     }
     if quilt && loader.is_none() {
-        return Err(Error::InvalidInput("This is a Quilt server pack. Hearth supports Fabric, Forge and NeoForge.".into()));
+        return Err(Error::InvalidInput(
+            "This is a Quilt server pack. Hearth supports Fabric, Forge and NeoForge.".into(),
+        ));
     }
 
     let mods: Vec<usize> = names
@@ -458,7 +525,10 @@ pub(crate) fn inspect_server_zip(file: &Path) -> Result<PackInfo> {
     }
     let mut warnings = vec![];
     if names.iter().any(|(_, n)| n == "manifest.json") && mods.is_empty() {
-        warnings.push("This looks like a CurseForge export, not a server pack. Use the pack's \"Server Pack\" download instead.".into());
+        warnings.push(
+            "This looks like a CurseForge export, not a server pack. Use the pack's \"Server Pack\" download instead."
+                .into(),
+        );
     }
     let name = file
         .file_stem()
@@ -494,7 +564,9 @@ pub async fn inspect(client: &reqwest::Client, file: &Path) -> Result<PackInfo> 
     } else {
         let file = file.to_path_buf();
         // Sniffing bundled jars can read a lot of data.
-        tokio::task::spawn_blocking(move || inspect_server_zip(&file)).await.expect("inspect task panicked")
+        tokio::task::spawn_blocking(move || inspect_server_zip(&file))
+            .await
+            .expect("inspect task panicked")
     }
 }
 
@@ -507,7 +579,14 @@ pub async fn unpack(ctx: &GameContext, file: &Path, dir: &Path, progress: Progre
         progress("Unpacking server pack", None);
         let (file, dir) = (file.to_path_buf(), dir.to_path_buf());
         tokio::task::spawn_blocking(move || {
-            extract_zip(&file, &dir, &ExtractOptions { strip_single_root: true, ..Default::default() })
+            extract_zip(
+                &file,
+                &dir,
+                &ExtractOptions {
+                    strip_single_root: true,
+                    ..Default::default()
+                },
+            )
         })
         .await
         .expect("extract task panicked")
@@ -551,15 +630,28 @@ mod tests {
         let file = |path: &str, sha: &str| MrFile {
             path: path.into(),
             hashes: [("sha512".to_string(), sha.to_string())].into(),
-            env: Some(MrEnv { server: Some("required".into()) }),
+            env: Some(MrEnv {
+                server: Some("required".into()),
+            }),
             downloads: vec!["https://cdn.modrinth.com/a.jar".into()],
         };
-        let files = vec![file("mods/iris.jar", "aa"), file("mods/lithium.jar", "bb"), file("mods/unknown.jar", "cc")];
-        let sides: HashMap<String, String> =
-            [("aa".to_string(), "unsupported".to_string()), ("bb".to_string(), "optional".to_string())].into();
+        let files = [
+            file("mods/iris.jar", "aa"),
+            file("mods/lithium.jar", "bb"),
+            file("mods/unknown.jar", "cc"),
+        ];
+        let sides: HashMap<String, String> = [
+            ("aa".to_string(), "unsupported".to_string()),
+            ("bb".to_string(), "optional".to_string()),
+        ]
+        .into();
         let (kept, skipped) = split_by_server_support(files.iter().collect(), &sides);
         let kept: Vec<&str> = kept.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(kept, vec!["mods/lithium.jar", "mods/unknown.jar"], "unknown projects are kept");
+        assert_eq!(
+            kept,
+            vec!["mods/lithium.jar", "mods/unknown.jar"],
+            "unknown projects are kept"
+        );
         assert_eq!(skipped, vec!["iris"]);
     }
 
@@ -581,7 +673,11 @@ mod tests {
 
     #[test]
     fn quilt_packs_are_refused_clearly() {
-        let deps: HashMap<String, String> = [("minecraft".into(), "1.21.1".into()), ("quilt-loader".into(), "0.26".into())].into();
+        let deps: HashMap<String, String> = [
+            ("minecraft".into(), "1.21.1".into()),
+            ("quilt-loader".into(), "0.26".into()),
+        ]
+        .into();
         assert!(mr_loader(&deps).unwrap_err().to_string().contains("Quilt"));
     }
 
@@ -589,14 +685,23 @@ mod tests {
     fn server_pack_with_forge_installed() {
         let tmp = tempfile::tempdir().unwrap();
         let p = tmp.path().join("All_The_Mods-Server.zip");
-        write_zip(&p, &[
-            ("ATM/libraries/net/minecraftforge/forge/1.20.1-47.3.0/win_args.txt", b"-jar x"),
-            ("ATM/mods/a.jar", b""),
-            ("ATM/mods/b.jar", b""),
-            ("ATM/run.bat", b""),
-        ]);
+        write_zip(
+            &p,
+            &[
+                (
+                    "ATM/libraries/net/minecraftforge/forge/1.20.1-47.3.0/win_args.txt",
+                    b"-jar x",
+                ),
+                ("ATM/mods/a.jar", b""),
+                ("ATM/mods/b.jar", b""),
+                ("ATM/run.bat", b""),
+            ],
+        );
         let i = inspect_server_zip(&p).unwrap();
-        assert_eq!((i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()), (Some("forge"), Some("1.20.1"), Some("47.3.0")));
+        assert_eq!(
+            (i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()),
+            (Some("forge"), Some("1.20.1"), Some("47.3.0"))
+        );
         assert_eq!(i.mod_count, 2);
         assert_eq!(i.name, "All The Mods Server");
         assert!(!i.needs_input);
@@ -606,27 +711,54 @@ mod tests {
     fn server_pack_with_bundled_installer() {
         let tmp = tempfile::tempdir().unwrap();
         let p = tmp.path().join("pack.zip");
-        let installer = zip_bytes(&[("install_profile.json", include_bytes!("../../tests/fixtures/neoforge_install_profile.json"))]);
-        write_zip(&p, &[("neoforge-26.3.0.101-installer.jar", &installer), ("mods/x.jar", b"")]);
+        let installer = zip_bytes(&[(
+            "install_profile.json",
+            include_bytes!("../../tests/fixtures/neoforge_install_profile.json"),
+        )]);
+        write_zip(
+            &p,
+            &[("neoforge-26.3.0.101-installer.jar", &installer), ("mods/x.jar", b"")],
+        );
         let i = inspect_server_zip(&p).unwrap();
-        assert_eq!((i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()), (Some("neoforge"), Some("26.3"), Some("26.3.0.101")));
+        assert_eq!(
+            (i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()),
+            (Some("neoforge"), Some("26.3"), Some("26.3.0.101"))
+        );
     }
 
     #[test]
     fn server_pack_with_fabric_launcher_and_variables() {
         let tmp = tempfile::tempdir().unwrap();
         let p = tmp.path().join("fabric.zip");
-        write_zip(&p, &[("fabric-server-mc.1.21.1-loader.0.16.10-launcher.1.0.1.jar", b""), ("mods/x.jar", b"")]);
+        write_zip(
+            &p,
+            &[
+                ("fabric-server-mc.1.21.1-loader.0.16.10-launcher.1.0.1.jar", b""),
+                ("mods/x.jar", b""),
+            ],
+        );
         let i = inspect_server_zip(&p).unwrap();
-        assert_eq!((i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()), (Some("fabric"), Some("1.21.1"), Some("0.16.10")));
+        assert_eq!(
+            (i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()),
+            (Some("fabric"), Some("1.21.1"), Some("0.16.10"))
+        );
 
         let p = tmp.path().join("spc.zip");
-        write_zip(&p, &[
-            ("variables.txt", b"MINECRAFT_VERSION=1.20.1\nMODLOADER=Forge\nMODLOADER_VERSION=47.2.0\nJAVA_ARGS=\"-Xmx4G\"\n"),
-            ("mods/x.jar", b""),
-        ]);
+        write_zip(
+            &p,
+            &[
+                (
+                    "variables.txt",
+                    b"MINECRAFT_VERSION=1.20.1\nMODLOADER=Forge\nMODLOADER_VERSION=47.2.0\nJAVA_ARGS=\"-Xmx4G\"\n",
+                ),
+                ("mods/x.jar", b""),
+            ],
+        );
         let i = inspect_server_zip(&p).unwrap();
-        assert_eq!((i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()), (Some("forge"), Some("1.20.1"), Some("47.2.0")));
+        assert_eq!(
+            (i.loader.as_deref(), i.minecraft.as_deref(), i.loader_version.as_deref()),
+            (Some("forge"), Some("1.20.1"), Some("47.2.0"))
+        );
     }
 
     #[test]
@@ -635,7 +767,15 @@ mod tests {
         let p = tmp.path().join("mystery.zip");
         let neo_mod = zip_bytes(&[("META-INF/neoforge.mods.toml", b"modLoader=\"javafml\"")]);
         let fabric_mod = zip_bytes(&[("fabric.mod.json", b"{}")]);
-        write_zip(&p, &[("mods/a.jar", &neo_mod), ("mods/b.jar", &neo_mod), ("mods/c.jar", &fabric_mod), ("config/x.toml", b"")]);
+        write_zip(
+            &p,
+            &[
+                ("mods/a.jar", &neo_mod),
+                ("mods/b.jar", &neo_mod),
+                ("mods/c.jar", &fabric_mod),
+                ("config/x.toml", b""),
+            ],
+        );
         let i = inspect_server_zip(&p).unwrap();
         assert_eq!(i.loader.as_deref(), Some("neoforge"));
         assert_eq!(i.minecraft, None);
@@ -647,7 +787,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let p = tmp.path().join("photos.zip");
         write_zip(&p, &[("cat.jpg", b"")]);
-        assert!(inspect_server_zip(&p).unwrap_err().to_string().contains("doesn't look like"));
+        assert!(inspect_server_zip(&p)
+            .unwrap_err()
+            .to_string()
+            .contains("doesn't look like"));
         let p = tmp.path().join("not-a-zip.zip");
         std::fs::write(&p, b"hello").unwrap();
         assert!(inspect_server_zip(&p).is_err());

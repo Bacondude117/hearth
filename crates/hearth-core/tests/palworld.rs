@@ -38,7 +38,11 @@ fn fake_api(server_dir: std::path::PathBuf) -> (u16, Arc<Mutex<Vec<String>>>) {
                 if let Some((head, body)) = req.split_once("\r\n\r\n") {
                     let len = head
                         .lines()
-                        .find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
                         .unwrap_or(0);
                     if body.len() >= len {
                         break;
@@ -47,13 +51,19 @@ fn fake_api(server_dir: std::path::PathBuf) -> (u16, Arc<Mutex<Vec<String>>>) {
             }
             let first = req.lines().next().unwrap_or("").to_owned();
             let authed = req.to_lowercase().contains("authorization: basic ywrtaw46cdrsc3dvcmq="); // admin:p4lsword
-            let body = req.split_once("\r\n\r\n").map(|(_, b)| b.to_owned()).unwrap_or_default();
+            let body = req
+                .split_once("\r\n\r\n")
+                .map(|(_, b)| b.to_owned())
+                .unwrap_or_default();
             log2.lock().unwrap().push(format!("{first} {body}"));
             let reply = if !authed {
                 "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n".to_owned()
             } else if first.starts_with("GET /v1/api/players") {
                 let json = r#"{"players":[{"name":"Bacon_Dude117","accountName":"Ryker","playerId":"P1","userId":"steam_76561198000000001","ping":10}]}"#;
-                format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{json}", json.len())
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{json}",
+                    json.len()
+                )
             } else {
                 if first.starts_with("POST /v1/api/shutdown") {
                     std::fs::write(server_dir.join("stop-flag"), "").unwrap();
@@ -86,7 +96,11 @@ async fn start_poll_players_broadcast_kick_and_stop() {
     // A fake PalServer that runs until the API's shutdown creates stop-flag.
     let exe = dir.join("Pal/Binaries/Linux/PalServer-Linux-Shipping");
     std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
-    std::fs::write(&exe, "#!/bin/bash\necho \"fake palworld $@\"\nwhile [ ! -f stop-flag ]; do sleep 0.1; done\necho bye\n").unwrap();
+    std::fs::write(
+        &exe,
+        "#!/bin/bash\necho \"fake palworld $@\"\nwhile [ ! -f stop-flag ]; do sleep 0.1; done\necho bye\n",
+    )
+    .unwrap();
     std::fs::set_permissions(&exe, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
 
     let (api_port, log) = fake_api(dir.clone());
@@ -121,8 +135,14 @@ async fn start_poll_players_broadcast_kick_and_stop() {
     let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
     m.start(id).await.unwrap();
     assert_eq!(m.get(id).unwrap().status, ServerStatus::Starting);
-    eventually("Online via REST poll", || m.get(id).unwrap().status == ServerStatus::Running).await;
-    eventually("players from REST", || m.get(id).unwrap().players == vec!["Bacon_Dude117".to_string()]).await;
+    eventually("Online via REST poll", || {
+        m.get(id).unwrap().status == ServerStatus::Running
+    })
+    .await;
+    eventually("players from REST", || {
+        m.get(id).unwrap().players == vec!["Bacon_Dude117".to_string()]
+    })
+    .await;
 
     // The players tab knows the Steam ID from the poll.
     let view = m.players(id).unwrap();
@@ -131,7 +151,9 @@ async fn start_poll_players_broadcast_kick_and_stop() {
     assert_eq!(view.players[0].id.as_deref(), Some("steam_76561198000000001"));
 
     m.command(id, "Server restarts in 5 minutes").await.unwrap();
-    m.player_action(id, "Bacon_Dude117", PlayerAction::Kick { reason: None }).await.unwrap();
+    m.player_action(id, "Bacon_Dude117", PlayerAction::Kick { reason: None })
+        .await
+        .unwrap();
 
     m.stop(id).await.unwrap();
     assert_eq!(m.get(id).unwrap().status, ServerStatus::Stopped);
@@ -139,10 +161,29 @@ async fn start_poll_players_broadcast_kick_and_stop() {
     let calls = log.lock().unwrap().clone();
     let has = |p: &str| calls.iter().any(|c| c.starts_with(p));
     assert!(has("GET /v1/api/players"), "{calls:#?}");
-    assert!(calls.iter().any(|c| c.starts_with("POST /v1/api/announce") && c.contains("Server restarts in 5 minutes")), "{calls:#?}");
-    assert!(calls.iter().any(|c| c.starts_with("POST /v1/api/kick") && c.contains("steam_76561198000000001")), "{calls:#?}");
-    let save = calls.iter().position(|c| c.starts_with("POST /v1/api/save")).expect("save before stop");
-    let shutdown = calls.iter().position(|c| c.starts_with("POST /v1/api/shutdown")).expect("shutdown");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("POST /v1/api/announce") && c.contains("Server restarts in 5 minutes")),
+        "{calls:#?}"
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("POST /v1/api/kick") && c.contains("steam_76561198000000001")),
+        "{calls:#?}"
+    );
+    let save = calls
+        .iter()
+        .position(|c| c.starts_with("POST /v1/api/save"))
+        .expect("save before stop");
+    let shutdown = calls
+        .iter()
+        .position(|c| c.starts_with("POST /v1/api/shutdown"))
+        .expect("shutdown");
     assert!(save < shutdown, "world saved before shutdown");
-    assert!(m.console_lines(id).iter().any(|l| l.text.contains("fake palworld Pal -port=28211")));
+    assert!(m
+        .console_lines(id)
+        .iter()
+        .any(|l| l.text.contains("fake palworld Pal -port=28211")));
 }

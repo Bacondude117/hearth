@@ -49,7 +49,10 @@ pub(crate) trait IoContext<T> {
 
 impl<T> IoContext<T> for std::io::Result<T> {
     fn at(self, path: impl Into<PathBuf>) -> Result<T> {
-        self.map_err(|source| Error::Io { path: path.into(), source })
+        self.map_err(|source| Error::Io {
+            path: path.into(),
+            source,
+        })
     }
 }
 

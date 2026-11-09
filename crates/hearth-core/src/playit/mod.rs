@@ -204,7 +204,9 @@ impl Playit {
                     let dir = self.paths.playit();
                     tokio::fs::create_dir_all(&dir).await.at(&dir)?;
                     let path = self.secret_path();
-                    tokio::fs::write(&path, format!("secret_key = \"{}\"\n", secret.trim())).await.at(&path)?;
+                    tokio::fs::write(&path, format!("secret_key = \"{}\"\n", secret.trim()))
+                        .await
+                        .at(&path)?;
                     return Ok(true);
                 }
             };
@@ -283,7 +285,14 @@ impl Playit {
         };
         // The agent is "ready" as soon as it runs; there is no banner to wait for.
         let parser: crate::process::LineParser = Arc::new(|_: &str| None::<LineEvent>);
-        let proc = ServerProcess::spawn(CONSOLE_ID.into(), &spec, parser, "", self.console.clone(), Arc::new(Relay(self.sink.clone())))?;
+        let proc = ServerProcess::spawn(
+            CONSOLE_ID.into(),
+            &spec,
+            parser,
+            "",
+            self.console.clone(),
+            Arc::new(Relay(self.sink.clone())),
+        )?;
         // The agent prints no "ready" banner; a live process counts as running.
         proc.force_running();
         *daemon = Some(proc);
@@ -311,7 +320,9 @@ impl Playit {
     // ---- tunnels ----------------------------------------------------------------------------
 
     fn api(&self) -> Result<PlayitApi> {
-        let secret = self.read_secret().ok_or_else(|| Error::Playit("link your playit.gg account first".into()))?;
+        let secret = self
+            .read_secret()
+            .ok_or_else(|| Error::Playit("link your playit.gg account first".into()))?;
         Ok(PlayitApi::new(self.client.clone(), Some(secret)))
     }
 
@@ -370,9 +381,18 @@ impl Playit {
 
     /// `tunnel_type` is playit's game preset (e.g. `minecraft-java`), or `None` for a plain
     /// TCP/UDP tunnel.
-    pub async fn create_tunnel(&self, tunnel_type: Option<&str>, port_type: &str, local_port: u16, name: &str) -> Result<String> {
+    pub async fn create_tunnel(
+        &self,
+        tunnel_type: Option<&str>,
+        port_type: &str,
+        local_port: u16,
+        name: &str,
+    ) -> Result<String> {
         let data = self.rundata(true).await?;
-        let id = self.api()?.create_tunnel(&data.agent_id, tunnel_type, port_type, local_port, name).await?;
+        let id = self
+            .api()?
+            .create_tunnel(&data.agent_id, tunnel_type, port_type, local_port, name)
+            .await?;
         *self.rundata.lock().unwrap() = None;
         self.changed();
         Ok(id)

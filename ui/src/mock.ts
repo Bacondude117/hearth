@@ -162,7 +162,7 @@ function log(id: string, text: string, stream: LogLine["stream"] = "stdout") {
   const arr = consoles.get(id) ?? [];
   arr.push(line);
   consoles.set(id, arr);
-  emit({ type: "serverLog", instanceId: id, line });
+  emit({ type: "serverLog", instanceId: id, lines: [line] });
 }
 
 function setStatus(s: Server, status: ServerStatus) {
@@ -414,6 +414,24 @@ const handlers: Record<string, (a: any) => unknown> = {
     { seq: 3, text: "INFO playitd: tunnel running ember-fox.gl.joinmc.link -> 127.0.0.1:25565", stream: "stdout" },
   ],
   quit_app: () => undefined,
+};
+
+// Dev-only load generator: streams `n` console lines into the first server the way the Rust
+// side delivers them (one batched event per 100 ms). Used to benchmark console rendering.
+(window as unknown as { __spam: (n: number) => Promise<void> }).__spam = async (n: number) => {
+  const id = "survival-1a2b";
+  let sent = 0;
+  while (sent < n) {
+    const batch: LogLine[] = [];
+    for (let i = 0; i < 250 && sent < n; i++, sent++) {
+      const seq = (seqs.get(id) ?? 0) + 1;
+      seqs.set(id, seq);
+      batch.push({ seq, text: `[12:00:00 INFO]: [mod${sent % 40}] Loaded ${sent} things in ${sent % 97}ms`, stream: "stdout" });
+    }
+    consoles.set(id, [...(consoles.get(id) ?? []), ...batch]);
+    emit({ type: "serverLog", instanceId: id, lines: batch });
+    await sleep(100);
+  }
 };
 
 export function createMockBackend() {

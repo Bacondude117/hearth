@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.2] - 2026-11-09
+
+### Changed
+- **Lighter on your PC**, so more CPU and memory go to your servers and games:
+  - Hearth runs at below-normal CPU priority on Windows; servers still start at normal priority.
+  - Console output is sent to the window in batches and only new lines are drawn; older lines skip layout while scrolled away. In a 5,000-line test this cut the window's CPU time by about 40%.
+  - While Hearth is minimized or hidden it stops drawing console output and polling playit, and catches up when you return.
+  - Fewer background threads, and fully optimized release builds.
+
+### Fixed
+- New Minecraft Java servers started with **Whitelist only** turned on, because Minecraft 26 now defaults to it. Hearth now creates them with the whitelist off.
+
 ## [0.4.1] - 2026-11-09
 
 ### Fixed

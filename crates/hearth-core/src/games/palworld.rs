@@ -32,7 +32,9 @@ fn platform_dir() -> &'static str {
 }
 
 pub fn settings_path(dir: &Path) -> PathBuf {
-    dir.join("Pal/Saved/Config").join(platform_dir()).join("PalWorldSettings.ini")
+    dir.join("Pal/Saved/Config")
+        .join(platform_dir())
+        .join("PalWorldSettings.ini")
 }
 
 fn banlist_path(dir: &Path) -> PathBuf {
@@ -55,12 +57,13 @@ pub fn rest_port(game_port: u16) -> u16 {
 /// Builds an API client from the server's own settings (port + admin password).
 fn api(dir: &Path) -> Result<PalApi> {
     let s = PalSettings::load(&settings_path(dir))?;
-    let port: u16 = s
-        .get("RESTAPIPort")
-        .and_then(|p| p.parse().ok())
-        .ok_or_else(|| Error::InvalidInput("RESTAPIPort is missing from PalWorldSettings.ini. Try reinstalling.".into()))?;
+    let port: u16 = s.get("RESTAPIPort").and_then(|p| p.parse().ok()).ok_or_else(|| {
+        Error::InvalidInput("RESTAPIPort is missing from PalWorldSettings.ini. Try reinstalling.".into())
+    })?;
     let password = s.get("AdminPassword").filter(|p| !p.is_empty()).ok_or_else(|| {
-        Error::InvalidInput("AdminPassword is empty in PalWorldSettings.ini; Hearth needs it to control the server.".into())
+        Error::InvalidInput(
+            "AdminPassword is empty in PalWorldSettings.ini; Hearth needs it to control the server.".into(),
+        )
     })?;
     Ok(PalApi::new(port, &password))
 }
@@ -116,7 +119,11 @@ impl GameProvider for Palworld {
     }
 
     async fn versions(&self, _ctx: &GameContext, _flavor: &str) -> Result<Vec<GameVersion>> {
-        Ok(vec![GameVersion { id: "latest".into(), label: "Latest (Steam)".into(), stable: true }])
+        Ok(vec![GameVersion {
+            id: "latest".into(),
+            label: "Latest (Steam)".into(),
+            stable: true,
+        }])
     }
 
     async fn install(
@@ -140,7 +147,9 @@ impl GameProvider for Palworld {
     fn launch(&self, _ctx: &GameContext, inst: &Instance, dir: &Path) -> Result<LaunchSpec> {
         let exe = executable(dir);
         if !exe.exists() {
-            return Err(Error::InvalidInput("The Palworld server files are missing. Try reinstalling (Settings → Update).".into()));
+            return Err(Error::InvalidInput(
+                "The Palworld server files are missing. Try reinstalling (Settings → Update).".into(),
+            ));
         }
         Ok(LaunchSpec {
             program: exe,
@@ -194,10 +203,14 @@ impl GameProvider for Palworld {
         let mut s = PalSettings::load(&path)?;
         for (k, v) in changes {
             if k == "RESTAPIEnabled" && !v.eq_ignore_ascii_case("true") {
-                return Err(Error::InvalidInput("Hearth needs the REST API to control Palworld; it can't be turned off.".into()));
+                return Err(Error::InvalidInput(
+                    "Hearth needs the REST API to control Palworld; it can't be turned off.".into(),
+                ));
             }
             if k == "AdminPassword" && v.trim().is_empty() {
-                return Err(Error::InvalidInput("The admin password can't be empty; Hearth uses it to control the server.".into()));
+                return Err(Error::InvalidInput(
+                    "The admin password can't be empty; Hearth uses it to control the server.".into(),
+                ));
             }
             s.set(k, v);
         }
@@ -211,7 +224,10 @@ impl GameProvider for Palworld {
         };
         Some(api.players().await.map(|ps| {
             ps.into_iter()
-                .map(|p| RemotePlayer { id: (!p.user_id.is_empty()).then_some(p.user_id), name: p.name })
+                .map(|p| RemotePlayer {
+                    id: (!p.user_id.is_empty()).then_some(p.user_id),
+                    name: p.name,
+                })
                 .collect()
         }))
     }
@@ -242,7 +258,12 @@ pub struct PalworldPlayers;
 
 fn read_banlist(dir: &Path) -> Vec<String> {
     std::fs::read_to_string(banlist_path(dir))
-        .map(|s| s.lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).collect())
+        .map(|s| {
+            s.lines()
+                .map(|l| l.trim().to_owned())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -262,7 +283,11 @@ fn user_id(name: &str, seen: &[SeenPlayer]) -> Result<String> {
     seen.iter()
         .find(|s| s.name.eq_ignore_ascii_case(name))
         .and_then(|s| s.id.clone())
-        .ok_or_else(|| Error::InvalidInput(format!("Hearth doesn't know {name}'s Steam ID yet; they need to join the server once.")))
+        .ok_or_else(|| {
+            Error::InvalidInput(format!(
+                "Hearth doesn't know {name}'s Steam ID yet; they need to join the server once."
+            ))
+        })
 }
 
 #[async_trait]
@@ -289,7 +314,10 @@ impl PlayerAdmin for PalworldPlayers {
         let mut out: Vec<PlayerEntry> = names
             .into_iter()
             .map(|name| {
-                let id = seen.iter().find(|s| s.name.eq_ignore_ascii_case(&name)).and_then(|s| s.id.clone());
+                let id = seen
+                    .iter()
+                    .find(|s| s.name.eq_ignore_ascii_case(&name))
+                    .and_then(|s| s.id.clone());
                 PlayerEntry {
                     online: online.iter().any(|o| o.eq_ignore_ascii_case(&name)),
                     role: Role::Player,
@@ -301,7 +329,11 @@ impl PlayerAdmin for PalworldPlayers {
                 }
             })
             .collect();
-        out.sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        out.sort_by(|a, b| {
+            b.online
+                .cmp(&a.online)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         Ok(out)
     }
 
@@ -310,20 +342,31 @@ impl PlayerAdmin for PalworldPlayers {
     }
 
     fn commands(&self, _name: &str, _action: &PlayerAction) -> Result<Vec<String>> {
-        Err(Error::InvalidInput("Palworld is controlled through its admin API, not console commands.".into()))
+        Err(Error::InvalidInput(
+            "Palworld is controlled through its admin API, not console commands.".into(),
+        ))
     }
 
-    async fn apply_live(&self, dir: &Path, name: &str, seen: &[SeenPlayer], action: &PlayerAction) -> Option<Result<()>> {
+    async fn apply_live(
+        &self,
+        dir: &Path,
+        name: &str,
+        seen: &[SeenPlayer],
+        action: &PlayerAction,
+    ) -> Option<Result<()>> {
         Some(
             async {
                 let api = api(dir)?;
                 let id = user_id(name, seen)?;
-                let reason = |r: &Option<String>, d: &str| crate::players::clean_reason(r).unwrap_or_else(|| d.to_owned());
+                let reason =
+                    |r: &Option<String>, d: &str| crate::players::clean_reason(r).unwrap_or_else(|| d.to_owned());
                 match action {
                     PlayerAction::Kick { reason: r } => api.kick(&id, &reason(r, "You were kicked.")).await,
                     PlayerAction::Ban { reason: r } => api.ban(&id, &reason(r, "You are banned.")).await,
                     PlayerAction::Unban => api.unban(&id).await,
-                    _ => Err(Error::InvalidInput("Palworld servers don't have roles, whitelists or game modes.".into())),
+                    _ => Err(Error::InvalidInput(
+                        "Palworld servers don't have roles, whitelists or game modes.".into(),
+                    )),
                 }
             }
             .await,
@@ -353,7 +396,9 @@ impl PlayerAdmin for PalworldPlayers {
                 write_banlist(dir, &bans)
             }
             PlayerAction::Kick { .. } => Err(Error::Conflict("The player has to be online for that.".into())),
-            _ => Err(Error::InvalidInput("Palworld servers don't have roles, whitelists or game modes.".into())),
+            _ => Err(Error::InvalidInput(
+                "Palworld servers don't have roles, whitelists or game modes.".into(),
+            )),
         }
     }
 }
@@ -416,12 +461,27 @@ mod tests {
 
     #[test]
     fn ports_and_launch() {
-        assert_eq!(Palworld.ports_used(8211), vec![(8211, Protocol::Udp), (8212, Protocol::Tcp)]);
+        assert_eq!(
+            Palworld.ports_used(8211),
+            vec![(8211, Protocol::Udp), (8212, Protocol::Tcp)]
+        );
         let t = tempfile::tempdir().unwrap();
-        assert!(Palworld.launch(&GameContext::new(crate::paths::AppPaths::new(t.path()), crate::http::client()), &inst(8211), t.path()).is_err());
+        assert!(Palworld
+            .launch(
+                &GameContext::new(crate::paths::AppPaths::new(t.path()), crate::http::client()),
+                &inst(8211),
+                t.path()
+            )
+            .is_err());
         std::fs::create_dir_all(executable(t.path()).parent().unwrap()).unwrap();
         std::fs::write(executable(t.path()), b"").unwrap();
-        let spec = Palworld.launch(&GameContext::new(crate::paths::AppPaths::new(t.path()), crate::http::client()), &inst(8211), t.path()).unwrap();
+        let spec = Palworld
+            .launch(
+                &GameContext::new(crate::paths::AppPaths::new(t.path()), crate::http::client()),
+                &inst(8211),
+                t.path(),
+            )
+            .unwrap();
         assert_eq!(spec.args[0], "Pal");
         assert!(spec.args.contains(&"-port=8211".to_string()));
     }
@@ -431,29 +491,57 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         std::fs::write(t.path().join("DefaultPalWorldSettings.ini"), DEFAULT).unwrap();
         prepare_settings(t.path(), &inst(8211), true).unwrap();
-        assert!(Palworld.write_settings(t.path(), &[("RESTAPIEnabled".into(), "False".into())]).is_err());
-        assert!(Palworld.write_settings(t.path(), &[("AdminPassword".into(), "".into())]).is_err());
-        Palworld.write_settings(t.path(), &[("ServerPlayerMaxNum".into(), "8".into())]).unwrap();
-        assert!(Palworld.read_settings(t.path()).unwrap().contains(&("ServerPlayerMaxNum".into(), "8".into())));
+        assert!(Palworld
+            .write_settings(t.path(), &[("RESTAPIEnabled".into(), "False".into())])
+            .is_err());
+        assert!(Palworld
+            .write_settings(t.path(), &[("AdminPassword".into(), "".into())])
+            .is_err());
+        Palworld
+            .write_settings(t.path(), &[("ServerPlayerMaxNum".into(), "8".into())])
+            .unwrap();
+        assert!(Palworld
+            .read_settings(t.path())
+            .unwrap()
+            .contains(&("ServerPlayerMaxNum".into(), "8".into())));
         Palworld.apply_port(t.path(), 9000).unwrap();
         let s = PalSettings::load(&settings_path(t.path())).unwrap();
-        assert_eq!((s.raw("PublicPort"), s.raw("RESTAPIPort")), (Some("9000"), Some("9001")));
+        assert_eq!(
+            (s.raw("PublicPort"), s.raw("RESTAPIPort")),
+            (Some("9000"), Some("9001"))
+        );
     }
 
     #[tokio::test]
     async fn offline_bans_edit_the_banlist() {
         let t = tempfile::tempdir().unwrap();
-        let seen = vec![SeenPlayer { name: "Bacon_Dude117".into(), id: Some("steam_765611".into()), last_seen: Utc::now() }];
+        let seen = vec![SeenPlayer {
+            name: "Bacon_Dude117".into(),
+            id: Some("steam_765611".into()),
+            last_seen: Utc::now(),
+        }];
         let ctx = GameContext::new(crate::paths::AppPaths::new(t.path()), crate::http::client());
         let ban = PlayerAction::Ban { reason: None };
-        PalworldPlayers.apply_offline(&ctx, t.path(), "bacon_dude117", &seen, &ban).await.unwrap();
-        PalworldPlayers.apply_offline(&ctx, t.path(), "Bacon_Dude117", &seen, &ban).await.unwrap();
+        PalworldPlayers
+            .apply_offline(&ctx, t.path(), "bacon_dude117", &seen, &ban)
+            .await
+            .unwrap();
+        PalworldPlayers
+            .apply_offline(&ctx, t.path(), "Bacon_Dude117", &seen, &ban)
+            .await
+            .unwrap();
         assert_eq!(read_banlist(t.path()), vec!["steam_765611"]);
         let list = PalworldPlayers.list(t.path(), &[], &seen).unwrap();
         assert!(list[0].banned);
-        PalworldPlayers.apply_offline(&ctx, t.path(), "Bacon_Dude117", &seen, &PlayerAction::Unban).await.unwrap();
+        PalworldPlayers
+            .apply_offline(&ctx, t.path(), "Bacon_Dude117", &seen, &PlayerAction::Unban)
+            .await
+            .unwrap();
         assert!(read_banlist(t.path()).is_empty());
-        let e = PalworldPlayers.apply_offline(&ctx, t.path(), "Stranger", &seen, &ban).await.unwrap_err();
+        let e = PalworldPlayers
+            .apply_offline(&ctx, t.path(), "Stranger", &seen, &ban)
+            .await
+            .unwrap_err();
         assert!(e.to_string().contains("join the server once"));
     }
 }

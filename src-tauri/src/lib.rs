@@ -22,6 +22,19 @@ pub struct AppState {
 }
 
 pub fn run() {
+    // Leave CPU to the game servers and games; servers themselves start at normal priority.
+    hearth_core::system::lower_own_priority();
+    // A manager app needs few threads: cap Tokio's workers instead of one per core.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .thread_name("hearth")
+        .enable_all()
+        .build()
+        .expect("failed to start the async runtime");
+    tauri::async_runtime::set(runtime.handle().clone());
+    // The runtime must live for the whole app.
+    std::mem::forget(runtime);
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,hearth_core=debug".into()),

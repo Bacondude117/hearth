@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, onEvent, type LogLine } from "../api";
 
 const MAX_LINES = 2000;
+/** Lines are rendered in fixed chunks so only the newest chunk re-renders as lines arrive. */
+const CHUNK = 100;
 
 interface Props {
   consoleId: string;
@@ -25,23 +27,43 @@ export function Console({ consoleId, load, onCommand, canSend = true, placeholde
     let lastSeq = 0;
     let cancelled = false;
     const pending: LogLine[] = [];
+    // Lines that arrive while the window is hidden are kept here and shown when it's visible
+    // again, so a minimized Hearth does no rendering work.
+    let hiddenBuffer: LogLine[] = [];
     setLines([]);
     stick.current = true;
+
+    const append = (incoming: LogLine[]) => {
+      const fresh = incoming.filter((l) => l.seq > lastSeq);
+      if (!fresh.length) return;
+      lastSeq = fresh[fresh.length - 1].seq;
+      if (document.hidden) {
+        hiddenBuffer.push(...fresh);
+        if (hiddenBuffer.length > MAX_LINES) hiddenBuffer = hiddenBuffer.slice(-MAX_LINES);
+        return;
+      }
+      setLines((l) => {
+        const next = l.concat(fresh);
+        return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
+      });
+    };
+
+    const onVisible = () => {
+      if (document.hidden || !hiddenBuffer.length) return;
+      const buffered = hiddenBuffer;
+      hiddenBuffer = [];
+      setLines((l) => l.concat(buffered).slice(-MAX_LINES));
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     // Subscribe first so nothing is lost between the backlog fetch and live events.
     const off = onEvent((e) => {
       if (e.type !== "serverLog" || e.instanceId !== consoleId) return;
       if (lastSeq === 0) {
-        pending.push(e.line);
+        pending.push(...e.lines);
         return;
       }
-      if (e.line.seq <= lastSeq) return;
-      lastSeq = e.line.seq;
-      setLines((l) => {
-        const next = l.length >= MAX_LINES ? l.slice(-MAX_LINES + 1) : l.slice();
-        next.push(e.line);
-        return next;
-      });
+      append(e.lines);
     });
 
     void load().then((backlog) => {
@@ -54,8 +76,34 @@ export function Console({ consoleId, load, onCommand, canSend = true, placeholde
     return () => {
       cancelled = true;
       off();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [consoleId, load]);
+
+  // Group by sequence number so a full chunk's array (and component) stays the same as new
+  // lines arrive.
+  const chunks = useMemo(() => {
+    const out: { id: number; lines: LogLine[] }[] = [];
+    for (const l of lines) {
+      const id = Math.floor(l.seq / CHUNK);
+      const last = out[out.length - 1];
+      if (last && last.id === id) last.lines.push(l);
+      else out.push({ id, lines: [l] });
+    }
+    return out;
+  }, [lines]);
+  const chunkCache = useRef(new Map<number, LogLine[]>());
+  const stableChunks = chunks.map((c) => {
+    const prev = chunkCache.current.get(c.id);
+    const same = prev && prev.length === c.lines.length && prev[0]?.seq === c.lines[0]?.seq;
+    if (same) return { id: c.id, lines: prev };
+    chunkCache.current.set(c.id, c.lines);
+    return c;
+  });
+  if (chunkCache.current.size > chunks.length + 4) {
+    const live = new Set(chunks.map((c) => c.id));
+    for (const k of chunkCache.current.keys()) if (!live.has(k)) chunkCache.current.delete(k);
+  }
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -96,10 +144,8 @@ export function Console({ consoleId, load, onCommand, canSend = true, placeholde
     <div className="console">
       <div className="console-log" ref={scroller} onScroll={onScroll} role="log" aria-live="off" tabIndex={0}>
         {lines.length === 0 && <div className="console-empty">Nothing here yet.</div>}
-        {lines.map((l) => (
-          <div key={l.seq} className={`ln ${l.stream} ${lineTone(l.text)}`}>
-            {l.text || " "}
-          </div>
+        {stableChunks.map((c, i) => (
+          <Chunk key={c.id} lines={c.lines} deferred={i < stableChunks.length - 1} />
         ))}
       </div>
       {onCommand && (
@@ -120,6 +166,19 @@ export function Console({ consoleId, load, onCommand, canSend = true, placeholde
     </div>
   );
 }
+
+/** A block of console lines. Older blocks skip layout/paint while scrolled out of view. */
+const Chunk = memo(function Chunk({ lines, deferred }: { lines: LogLine[]; deferred: boolean }) {
+  return (
+    <div className={deferred ? "chunk deferred" : "chunk"}>
+      {lines.map((l) => (
+        <div key={l.seq} className={`ln ${l.stream} ${lineTone(l.text)}`}>
+          {l.text || "\u00a0"}
+        </div>
+      ))}
+    </div>
+  );
+});
 
 function lineTone(t: string): string {
   if (/\b(ERROR|SEVERE|FATAL)\b|Exception/.test(t)) return "err";

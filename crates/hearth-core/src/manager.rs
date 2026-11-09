@@ -8,17 +8,17 @@ use std::time::Duration;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::content::{self, ContentEntry, ContentFolder};
 use crate::error::{Error, Result};
 use crate::events::{Event, EventSink, LogLine, LogStream};
 use crate::games::{GameContext, GameInfo, GameProvider, GameVersion, Registry};
+use crate::instance::PackSource;
 use crate::instance::{InstallState, Instance, InstanceStore};
 use crate::net::{self, Protocol};
-use crate::paths::AppPaths;
-use crate::playit::{Playit, TunnelInfo};
-use crate::players::{PlayerAction, PlayerBook, PlayersView};
-use crate::content::{self, ContentEntry, ContentFolder};
-use crate::instance::PackSource;
 use crate::packs::PackInfo;
+use crate::paths::AppPaths;
+use crate::players::{PlayerAction, PlayerBook, PlayersView};
+use crate::playit::{Playit, TunnelInfo};
 use crate::process::{Console, ServerProcess, ServerStatus};
 
 pub const STOP_TIMEOUT: Duration = Duration::from_secs(45);
@@ -111,8 +111,9 @@ impl ServerManager {
         if let Ok(list) = self.store.list() {
             for mut inst in list {
                 if matches!(inst.install_state, InstallState::Installing | InstallState::Pending) {
-                    inst.install_state =
-                        InstallState::Failed { message: "Installation was interrupted. Click Retry.".into() };
+                    inst.install_state = InstallState::Failed {
+                        message: "Installation was interrupted. Click Retry.".into(),
+                    };
                     let _ = self.store.save(&inst);
                 }
             }
@@ -128,7 +129,10 @@ impl ServerManager {
             .lock()
             .unwrap()
             .entry(id.to_owned())
-            .or_insert_with(|| Slot { console: Arc::new(Console::new(id.to_owned(), self.sink.clone())), process: None })
+            .or_insert_with(|| Slot {
+                console: Arc::new(Console::new(id.to_owned(), self.sink.clone())),
+                process: None,
+            })
             .console
             .clone()
     }
@@ -195,7 +199,10 @@ impl ServerManager {
         let mut port = info.default_port;
         loop {
             let used = p.ports_used(port);
-            if used.iter().all(|(u, proto)| !reserved.contains(u) && net::port_is_free(*u, *proto)) {
+            if used
+                .iter()
+                .all(|(u, proto)| !reserved.contains(u) && net::port_is_free(*u, *proto))
+            {
                 return Ok(port);
             }
             port = port
@@ -244,7 +251,9 @@ impl ServerManager {
             return Err(Error::InvalidInput("Pick a version.".into()));
         }
         if info.eula.is_some() && !req.accept_eula {
-            return Err(Error::InvalidInput("You need to accept the license agreement to continue.".into()));
+            return Err(Error::InvalidInput(
+                "You need to accept the license agreement to continue.".into(),
+            ));
         }
         let port = match req.port {
             Some(p) => {
@@ -287,8 +296,14 @@ impl ServerManager {
             return Err(Error::InvalidInput("Pick a port between 1024 and 65535.".into()));
         }
         let reserved = self.reserved_ports(except);
-        if let Some((p, _)) = provider.ports_used(port).into_iter().find(|(p, _)| reserved.contains(p)) {
-            return Err(Error::Conflict(format!("Port {p} is already used by another server in Hearth.")));
+        if let Some((p, _)) = provider
+            .ports_used(port)
+            .into_iter()
+            .find(|(p, _)| reserved.contains(p))
+        {
+            return Err(Error::Conflict(format!(
+                "Port {p} is already used by another server in Hearth."
+            )));
         }
         Ok(())
     }
@@ -332,10 +347,16 @@ impl ServerManager {
             }
             let console = me.console(&id);
             match &error {
-                None => console.push(LogStream::System, "Installation complete. Press Start to launch the server."),
+                None => console.push(
+                    LogStream::System,
+                    "Installation complete. Press Start to launch the server.",
+                ),
                 Some(e) => console.push(LogStream::System, format!("Installation failed: {e}")),
             }
-            me.sink.emit(Event::InstallFinished { instance_id: id.clone(), error });
+            me.sink.emit(Event::InstallFinished {
+                instance_id: id.clone(),
+                error,
+            });
             me.changed();
         });
         Ok(())
@@ -357,7 +378,11 @@ impl ServerManager {
                 *last = stage.to_owned();
                 console.push(LogStream::System, format!("{stage}..."));
             }
-            sink.emit(Event::InstallProgress { instance_id: id.to_owned(), stage: stage.to_owned(), fraction });
+            sink.emit(Event::InstallProgress {
+                instance_id: id.to_owned(),
+                stage: stage.to_owned(),
+                fraction,
+            });
         };
         let dir = self.paths.server_dir(id);
         let outcome = provider.install(&self.ctx, &inst, &dir, fresh, &progress).await?;
@@ -443,7 +468,14 @@ impl ServerManager {
             }
             ev
         });
-        let proc = ServerProcess::spawn(id.to_owned(), &spec, parser, provider.stop_command(), console, self.sink.clone())?;
+        let proc = ServerProcess::spawn(
+            id.to_owned(),
+            &spec,
+            parser,
+            provider.stop_command(),
+            console,
+            self.sink.clone(),
+        )?;
         if let Some(slot) = self.slots.lock().unwrap().get_mut(id) {
             slot.process = Some(proc.clone());
         }
@@ -504,9 +536,11 @@ impl ServerManager {
         if let Ok(inst) = self.store.get(id) {
             if let Ok(provider) = self.registry.get(&inst.game) {
                 if provider.stop_command().is_empty() {
-                    self.console(id).push(LogStream::System, "Saving and stopping server...");
+                    self.console(id)
+                        .push(LogStream::System, "Saving and stopping server...");
                     if !provider.remote_stop(&self.ctx, &inst, &self.paths.server_dir(id)).await {
-                        self.console(id).push(LogStream::System, "The server didn't answer; forcing it to close.");
+                        self.console(id)
+                            .push(LogStream::System, "The server didn't answer; forcing it to close.");
                         p.kill();
                     }
                 }
@@ -529,12 +563,18 @@ impl ServerManager {
     }
 
     pub async fn command(&self, id: &str, line: &str) -> Result<()> {
-        let p = self.process(id).ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
+        let p = self
+            .process(id)
+            .ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
         let inst = self.store.get(id)?;
         let provider = self.registry.get(&inst.game)?;
-        if let Some(r) = provider.console_input(&self.ctx, &inst, &self.paths.server_dir(id), line).await {
+        if let Some(r) = provider
+            .console_input(&self.ctx, &inst, &self.paths.server_dir(id), line)
+            .await
+        {
             r?;
-            self.console(id).push(LogStream::System, format!("> (broadcast) {line}"));
+            self.console(id)
+                .push(LogStream::System, format!("> (broadcast) {line}"));
             return Ok(());
         }
         p.send_command(line).await?;
@@ -585,7 +625,10 @@ impl ServerManager {
         let mut new_port = None;
         for (k, v) in &changes {
             if k == port_key {
-                let p: u16 = v.trim().parse().map_err(|_| Error::InvalidInput("The port must be a number.".into()))?;
+                let p: u16 = v
+                    .trim()
+                    .parse()
+                    .map_err(|_| Error::InvalidInput("The port must be a number.".into()))?;
                 if p != inst.port {
                     self.check_port_reserved(provider.as_ref(), p, Some(id))?;
                     new_port = Some(p);
@@ -601,7 +644,8 @@ impl ServerManager {
             self.store.save(&inst)?;
         }
         if self.is_active(id) {
-            self.console(id).push(LogStream::System, "Settings saved. Restart the server to apply them.");
+            self.console(id)
+                .push(LogStream::System, "Settings saved. Restart the server to apply them.");
         }
         self.changed();
         Ok(())
@@ -637,7 +681,9 @@ impl ServerManager {
                 return r;
             }
         }
-        Err(Error::InvalidInput("Hearth can import Modrinth .mrpack files and server pack .zip files.".into()))
+        Err(Error::InvalidInput(
+            "Hearth can import Modrinth .mrpack files and server pack .zip files.".into(),
+        ))
     }
 
     /// Creates a server from a modpack and starts installing it.
@@ -671,16 +717,28 @@ impl ServerManager {
             accept_eula: req.accept_eula,
         })?;
         // Keep a copy of the pack so a failed install can be retried.
-        let ext = req.file.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_else(|| "zip".into());
+        let ext = req
+            .file
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_else(|| "zip".into());
         let stored = format!("pack.{ext}");
         let dest = self.paths.instance_dir(&inst.id).join(&stored);
-        let copied = std::fs::copy(&req.file, &dest).map_err(|e| Error::Io { path: req.file.clone(), source: e });
+        let copied = std::fs::copy(&req.file, &dest).map_err(|e| Error::Io {
+            path: req.file.clone(),
+            source: e,
+        });
         if let Err(e) = copied {
             let _ = self.store.delete(&inst.id);
             return Err(e);
         }
         let mut inst = inst;
-        inst.pack = Some(PackSource { name: info.name, version: info.pack_version, file: Some(stored), loader_version });
+        inst.pack = Some(PackSource {
+            name: info.name,
+            version: info.pack_version,
+            file: Some(stored),
+            loader_version,
+        });
         self.store.save(&inst)?;
         self.changed();
         self.spawn_install(inst.id.clone(), true)?;
@@ -789,11 +847,15 @@ impl ServerManager {
                 }
             }
             Some((ServerStatus::Starting | ServerStatus::Stopping, _)) => {
-                return Err(Error::Conflict("Wait until the server has finished starting or stopping.".into()));
+                return Err(Error::Conflict(
+                    "Wait until the server has finished starting or stopping.".into(),
+                ));
             }
             _ => {
                 if action.needs_running() {
-                    return Err(Error::Conflict("Start the server first: the player has to be online for that.".into()));
+                    return Err(Error::Conflict(
+                        "Start the server first: the player has to be online for that.".into(),
+                    ));
                 }
                 admin.apply_offline(&self.ctx, &dir, name, &seen, &action).await?;
                 if let PlayerAction::Whitelist { on: true } = action {
@@ -867,10 +929,14 @@ fn provider_marker(inst: &Instance) -> &'static str {
 
 fn validate_memory(m: u32) -> Result<()> {
     if m < MIN_MEMORY_MB {
-        return Err(Error::InvalidInput(format!("Give the server at least {MIN_MEMORY_MB} MB of memory.")));
+        return Err(Error::InvalidInput(format!(
+            "Give the server at least {MIN_MEMORY_MB} MB of memory."
+        )));
     }
     if m > 64 * 1024 {
-        return Err(Error::InvalidInput("That's more memory than Hearth allows (64 GB).".into()));
+        return Err(Error::InvalidInput(
+            "That's more memory than Hearth allows (64 GB).".into(),
+        ));
     }
     Ok(())
 }
