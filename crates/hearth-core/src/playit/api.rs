@@ -149,7 +149,7 @@ pub(crate) fn create_tunnel_request(
     local_port: u16,
     name: &str,
 ) -> serde_json::Value {
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "name": name,
         "tunnel_type": tunnel_type,
         "port_type": port_type,
@@ -162,7 +162,13 @@ pub(crate) fn create_tunnel_request(
         "alloc": null,
         "firewall_id": null,
         "proxy_protocol": null,
-    })
+    });
+    // playit rejects custom (preset-less) tunnels without a description
+    // ("TunnelTypeRequiresDescription").
+    if tunnel_type.is_none() {
+        body["tunnel_description"] = serde_json::json!(name);
+    }
+    body
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -281,9 +287,14 @@ mod tests {
             })
         );
         assert_eq!(CREATE_TUNNEL_PATH, "/tunnels/create");
-        // Games without a playit preset get a plain UDP/TCP tunnel.
+        // Games without a playit preset get a plain UDP/TCP tunnel, which playit only accepts
+        // with a `tunnel_description` (verified against the live API).
         let r = create_tunnel_request("a", None, "udp", 8211, "Hearth: P");
         assert!(r["tunnel_type"].is_null());
         assert_eq!(r["port_type"], "udp");
+        assert_eq!(r["tunnel_description"], "Hearth: P");
+        // Preset tunnels don't send one.
+        let r = create_tunnel_request("a", Some("palworld"), "udp", 8211, "Hearth: P");
+        assert!(r.get("tunnel_description").is_none());
     }
 }

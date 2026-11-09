@@ -106,7 +106,8 @@ impl GameProvider for Palworld {
             protocol: Protocol::Udp,
             configurable_memory: false,
             eula: None,
-            playit_tunnel_type: None,
+            // Accepted by playit's API although its published client doesn't list it.
+            playit_tunnel_type: Some("palworld"),
             command_hint: "Broadcast a message to everyone in the game",
             setup_note: Some(
                 "Palworld servers need a lot of memory: 8 GB at minimum, 16 GB or more recommended. The first install downloads about 4 GB through Steam.",
@@ -405,6 +406,12 @@ mod tests {
         let s = PalSettings::load(&settings_path(t.path())).unwrap();
         assert_eq!(s.get("AdminPassword").unwrap(), pw);
         assert_eq!(s.get("ServerName").as_deref(), Some("Renamed"));
+    }
+
+    #[test]
+    fn uses_playits_palworld_tunnel_type() {
+        // Accepted by playit's live API (2026-11-09), though missing from its published client.
+        assert_eq!(Palworld.info().playit_tunnel_type, Some("palworld"));
     }
 
     #[test]

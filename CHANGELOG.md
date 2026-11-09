@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.1] - 2026-11-09
+
+### Fixed
+- **Share online** for Palworld failed with "tunnel type requires description". Hearth now uses playit's `palworld` tunnel type, and sends the description playit requires for custom tunnels (both verified against playit's live API).
+
 ## [0.4.0] - 2026-11-09
 
 ### Added
