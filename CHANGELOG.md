@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-11-09
+
+### Added
+- **Players tab** for every Minecraft server: everyone who has joined, who's online, and per-player controls.
+  - Role: Java servers have Player or Operator (operators get every command). Bedrock servers have Visitor, Member or Operator.
+  - Whitelist (Java) / allow list (Bedrock) toggle per player, plus "Add player by name" for people who haven't joined yet.
+  - Ban with an optional reason, and unban (Java).
+  - Kick and change game mode for players who are online.
+  - Changes apply instantly while the server runs, and are saved to the server's files while it's stopped.
+
 ## [0.1.1] - 2026-11-09
 
 ### Fixed

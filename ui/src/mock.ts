@@ -71,6 +71,21 @@ const tunnels = [
   { id: "t1", name: "Hearth: Survival", address: "ember-fox.gl.joinmc.link", localPort: 25565, protocol: "tcp", tunnelType: "minecraft-java", disabledReason: null },
 ];
 
+type MockPlayer = { name: string; id: string | null; role: string; whitelisted: boolean; banned: boolean; banReason: string | null };
+const playerStore = new Map<string, MockPlayer[]>([
+  ["survival-1a2b", [
+    { name: "Alex", id: "6ab43178-89fd-4905-97f6-0f67d9d76fd9", role: "operator", whitelisted: true, banned: false, banReason: null },
+    { name: "Steve_2", id: "1c2d3e4f-0000-4000-8000-000000000002", role: "player", whitelisted: true, banned: false, banReason: null },
+    { name: "Notch", id: "069a79f4-44e9-4726-a5be-fca90e38aaf5", role: "player", whitelisted: false, banned: false, banReason: null },
+    { name: "Griefer99", id: "1c2d3e4f-0000-4000-8000-000000000099", role: "player", whitelisted: false, banned: true, banReason: "TNT in spawn" },
+    { name: "Bacon_Dude117", id: "33f7864d-a02c-4e21-ae28-3ecf6f0fd767", role: "operator", whitelisted: true, banned: false, banReason: null },
+  ]],
+  ["bedrock-5e6f", [
+    { name: "Cool Guy 22", id: "2535412345", role: "operator", whitelisted: true, banned: false, banReason: null },
+    { name: "Kid Brother", id: null, role: "member", whitelisted: true, banned: false, banReason: null },
+  ]],
+]);
+
 const listeners = new Set<(p: unknown) => void>();
 const emit = (e: HearthEvent) => listeners.forEach((l) => l(e));
 
@@ -216,6 +231,38 @@ const handlers: Record<string, (a: any) => unknown> = {
     const cur = new Map(props.get(id) ?? []);
     for (const [k, v] of Object.entries(changes)) cur.set(k, v as string);
     props.set(id, [...cur.entries()]);
+  },
+  list_players: ({ id }) => {
+    const s = find(id);
+    const bedrock = s.game === "minecraft-bedrock";
+    const list = (playerStore.get(id) ?? []).map((p) => ({ ...p, online: s.players.includes(p.name) }));
+    list.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+    return {
+      caps: bedrock
+        ? { roles: ["visitor", "member", "operator"], canBan: false, gameModes: ["survival", "creative", "adventure", "spectator"], whitelistLabel: "Allow list", roleNeedsId: true }
+        : { roles: ["player", "operator"], canBan: true, gameModes: ["survival", "creative", "adventure", "spectator"], whitelistLabel: "Whitelist", roleNeedsId: false },
+      whitelistEnabled: !bedrock,
+      running: s.status.state === "running",
+      players: list,
+    };
+  },
+  player_action: ({ id, name, action }) => {
+    const s = find(id);
+    const list = playerStore.get(id) ?? [];
+    playerStore.set(id, list);
+    let p = list.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (!p) {
+      p = { name, id: null, role: s.game === "minecraft-bedrock" ? "member" : "player", whitelisted: false, banned: false, banReason: null };
+      list.push(p);
+    }
+    switch (action.type) {
+      case "setRole": p.role = action.role; break;
+      case "whitelist": p.whitelisted = action.on; break;
+      case "ban": p.banned = true; p.banReason = action.reason; s.players = s.players.filter((n) => n !== p!.name); break;
+      case "unban": p.banned = false; p.banReason = null; break;
+      case "kick": s.players = s.players.filter((n) => n !== p!.name); emit({ type: "serverPlayers", instanceId: id, players: s.players }); break;
+    }
+    if (s.status.state === "running") log(id, `> ${action.type} ${name}`, "system");
   },
   open_server_folder: () => undefined,
   open_link: ({ url }) => window.open(url, "_blank"),

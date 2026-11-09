@@ -172,6 +172,19 @@ impl GameProvider for MinecraftBedrock {
         vec![port, port.saturating_add(1)]
     }
 
+    fn players(&self) -> Option<&dyn crate::players::PlayerAdmin> {
+        Some(&super::bedrock_players::BedrockPlayers)
+    }
+
+    fn parse_identity(&self, line: &str) -> Option<(String, Option<String>)> {
+        // "[...] Player connected: Cool Guy 22, xuid: 2535412345"
+        let msg = line.split_once("] ").map(|(_, m)| m).unwrap_or(line);
+        let rest = msg.strip_prefix("Player connected: ")?;
+        let (name, tail) = rest.split_once(", xuid: ")?;
+        let xuid: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+        (!name.trim().is_empty()).then(|| (name.trim().to_owned(), (!xuid.is_empty()).then_some(xuid)))
+    }
+
     fn apply_port(&self, server_dir: &Path, port: u16) -> Result<()> {
         let path = server_dir.join("server.properties");
         let mut props = Properties::load(&path)?;
@@ -235,6 +248,15 @@ mod tests {
             Some(LineEvent::PlayerLeft("Cool Guy 22".into()))
         );
         assert_eq!(parse_bedrock_line("[2026-11-09 12:00:00:123 INFO] Starting Server"), None);
+    }
+
+    #[test]
+    fn parses_identity() {
+        assert_eq!(
+            MinecraftBedrock.parse_identity("[2026-11-09 12:00:00:123 INFO] Player connected: Cool Guy 22, xuid: 2535412345, pfid: abc"),
+            Some(("Cool Guy 22".into(), Some("2535412345".into())))
+        );
+        assert_eq!(MinecraftBedrock.parse_identity("[2026-11-09 12:00:00:123 INFO] Player disconnected: X, xuid: 1"), None);
     }
 
     #[test]

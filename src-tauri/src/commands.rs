@@ -7,6 +7,7 @@ use hearth_core::games::{GameInfo, GameVersion};
 use hearth_core::instance::Instance;
 use hearth_core::manager::{CreateServer, ServerSummary};
 use hearth_core::playit::{PlayitStatus, TunnelInfo};
+use hearth_core::players::{PlayerAction, PlayersView};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -122,6 +123,16 @@ pub fn get_properties(state: State<'_, AppState>, id: String) -> R<Vec<(String, 
 #[tauri::command]
 pub fn set_properties(state: State<'_, AppState>, id: String, changes: HashMap<String, String>) -> R<()> {
     state.manager.set_properties(&id, changes).map_err(e)
+}
+
+#[tauri::command]
+pub fn list_players(state: State<'_, AppState>, id: String) -> R<PlayersView> {
+    state.manager.players(&id).map_err(e)
+}
+
+#[tauri::command]
+pub async fn player_action(state: State<'_, AppState>, id: String, name: String, action: PlayerAction) -> R<()> {
+    state.manager.player_action(&id, &name, action).await.map_err(e)
 }
 
 #[tauri::command]

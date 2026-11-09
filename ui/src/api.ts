@@ -71,6 +71,39 @@ export interface TunnelInfo {
   disabledReason: string | null;
 }
 
+export type Role = "player" | "visitor" | "member" | "operator";
+
+export interface PlayerEntry {
+  name: string;
+  id: string | null;
+  online: boolean;
+  role: Role;
+  whitelisted: boolean;
+  banned: boolean;
+  banReason: string | null;
+}
+
+export interface PlayersView {
+  caps: {
+    roles: Role[];
+    canBan: boolean;
+    gameModes: string[];
+    whitelistLabel: string;
+    roleNeedsId: boolean;
+  };
+  whitelistEnabled: boolean;
+  running: boolean;
+  players: PlayerEntry[];
+}
+
+export type PlayerAction =
+  | { type: "setRole"; role: Role }
+  | { type: "whitelist"; on: boolean }
+  | { type: "ban"; reason: string | null }
+  | { type: "unban" }
+  | { type: "kick"; reason: string | null }
+  | { type: "gameMode"; mode: string };
+
 export interface PlayitStatus {
   supported: boolean;
   agentInstalled: boolean;
@@ -171,6 +204,8 @@ export const api = {
   consoleLines: (id: string) => call<LogLine[]>("console_lines", { id }),
   getProperties: (id: string) => call<[string, string][]>("get_properties", { id }),
   setProperties: (id: string, changes: Record<string, string>) => call<void>("set_properties", { id, changes }),
+  listPlayers: (id: string) => call<PlayersView>("list_players", { id }),
+  playerAction: (id: string, name: string, action: PlayerAction) => call<void>("player_action", { id, name, action }),
   openFolder: (id: string) => call<void>("open_server_folder", { id }),
   openLink: (url: string) => call<void>("open_link", { url }),
   shareInfo: (id: string) => call<TunnelInfo | null>("share_info", { id }),

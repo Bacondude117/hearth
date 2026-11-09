@@ -1,6 +1,8 @@
 //! The game catalog. Each supported game is a [`GameProvider`]; adding a game means adding
 //! one provider and registering it in [`Registry::builtin`].
 
+pub mod bedrock_players;
+pub mod java_players;
 pub mod minecraft_bedrock;
 pub mod minecraft_java;
 
@@ -16,6 +18,7 @@ use crate::instance::Instance;
 use crate::java::JavaRuntimes;
 use crate::net::Protocol;
 use crate::paths::AppPaths;
+use crate::players::PlayerAdmin;
 
 /// Shared services a provider may use.
 pub struct GameContext {
@@ -127,6 +130,17 @@ pub trait GameProvider: Send + Sync {
 
     /// Writes the port into the game's config.
     fn apply_port(&self, server_dir: &Path, port: u16) -> Result<()>;
+
+    /// Player management (roles, whitelist, bans), if this game supports it.
+    fn players(&self) -> Option<&dyn PlayerAdmin> {
+        None
+    }
+
+    /// A player's name and account id when a log line reveals them (recorded so files keyed
+    /// by id can be edited later).
+    fn parse_identity(&self, _line: &str) -> Option<(String, Option<String>)> {
+        None
+    }
 }
 
 pub struct Registry {

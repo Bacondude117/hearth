@@ -14,6 +14,7 @@ pub mod manager;
 pub mod net;
 pub mod paths;
 pub mod playit;
+pub mod players;
 pub mod process;
 pub mod properties;
 pub mod system;

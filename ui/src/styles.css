@@ -327,3 +327,31 @@ dialog.modal::backdrop { background: rgb(10 8 6 / 0.55); backdrop-filter: blur(2
   .server-view, .page { padding: 16px; }
   .row { flex-wrap: wrap; }
 }
+
+/* ---- players ------------------------------------------------------------------------------ */
+.players { display: flex; flex-direction: column; gap: 14px; padding: 16px 2px 8px; }
+.players-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.add-player { display: flex; gap: 8px; }
+.add-player input { width: 220px; }
+.apply-note { margin: 0; }
+.banner.info { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.stat-label .link { text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 4px; }
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; }
+.players-table { width: 100%; border-collapse: collapse; }
+.players-table th {
+  text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 650; padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.players-table td { padding: 8px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+.players-table tr:first-child td { border-top: 0; }
+.players-table tr.banned .player-name { color: var(--muted); text-decoration: line-through; }
+.players-table select { height: 30px; }
+.players-table .right { text-align: right; }
+.player-cell { display: flex; align-items: center; gap: 10px; }
+.player-name { font-weight: 600; }
+.row-actions { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.tag { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 99px; }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.empty-players { text-align: center; padding: 32px; background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
+input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }

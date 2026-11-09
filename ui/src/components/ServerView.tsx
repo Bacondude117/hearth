@@ -3,10 +3,13 @@ import { api, isActive, onEvent, type AppInfo, type GameInfo, type PlayitStatus,
 import { copy, displayState, errorText, flavorLabel } from "../util";
 import { Console } from "./Console";
 import { SettingsTab } from "./SettingsTab";
+import { PlayersTab } from "./PlayersTab";
 import { ShareTab } from "./ShareTab";
 import { useToast } from "./Toasts";
 
-type Tab = "console" | "settings" | "share";
+type Tab = "console" | "players" | "settings" | "share";
+
+const TAB_LABEL: Record<Tab, string> = { console: "Console", players: "Players", settings: "Settings", share: "Share online" };
 
 interface Props {
   server: Server;
@@ -107,7 +110,12 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
           <span className={`pill ${st.tone}`}>{st.label}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Players</span>
+          <span className="stat-label">
+            Players{" "}
+            <button className="link small" onClick={() => setTab("players")}>
+              Manage
+            </button>
+          </span>
           <span className="stat-value" title={server.players.join(", ")}>
             {active ? server.players.length : "–"}
             {active && server.players.length > 0 && <small className="players">{server.players.slice(0, 4).join(", ")}{server.players.length > 4 ? "…" : ""}</small>}
@@ -149,9 +157,9 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
       )}
 
       <nav className="tabs" role="tablist">
-        {(["console", "settings", "share"] as Tab[]).map((t) => (
+        {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "tab active" : "tab"} onClick={() => setTab(t)}>
-            {t === "console" ? "Console" : t === "settings" ? "Settings" : "Share online"}
+            {TAB_LABEL[t]}
           </button>
         ))}
         <span className="spacer" />
@@ -169,6 +177,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
             onCommand={(line) => api.sendCommand(server.id, line).catch((e) => toast(errorText(e), "error"))}
           />
         )}
+        {tab === "players" && <PlayersTab server={server} />}
         {tab === "settings" && <SettingsTab server={server} game={game} info={info} onDeleted={onDeleted} />}
         {tab === "share" && <ShareTab server={server} game={game} playit={playit} onOpenPlayit={onOpenPlayit} />}
       </div>

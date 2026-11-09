@@ -1452,7 +1452,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hearth"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "hearth-core",
  "serde",
@@ -1468,13 +1468,14 @@ dependencies = [
 
 [[package]]
 name = "hearth-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
  "flate2",
  "futures-util",
  "hex",
+ "md-5",
  "rand 0.8.8",
  "reqwest 0.12.28",
  "serde",
@@ -2108,6 +2109,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
+]
+
+[[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
 ]
 
 [[package]]

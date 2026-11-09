@@ -259,6 +259,18 @@ impl GameProvider for MinecraftJava {
         props.set("server-port", port.to_string());
         props.save(&path)
     }
+
+    fn players(&self) -> Option<&dyn crate::players::PlayerAdmin> {
+        Some(&super::java_players::JavaPlayers)
+    }
+
+    fn parse_identity(&self, line: &str) -> Option<(String, Option<String>)> {
+        // "[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-..."
+        let msg = line.split_once("]: ").map(|(_, m)| m).unwrap_or(line).trim_end();
+        let (name, uuid) = msg.strip_prefix("UUID of player ")?.split_once(" is ")?;
+        (super::java_players::valid_name(name) && uuid::Uuid::parse_str(uuid).is_ok())
+            .then(|| (name.to_owned(), Some(uuid.to_owned())))
+    }
 }
 
 async fn vanilla_detail(ctx: &GameContext, version: &str) -> Result<VersionDetail> {
@@ -357,6 +369,16 @@ mod tests {
         // Other lines around a join must not count.
         assert_eq!(parse_java_line("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
         assert_eq!(parse_java_line("[22:53:06 INFO]: System chat: There are 1 of a max of 20 players online: Bacon_Dude117"), None);
+    }
+
+    #[test]
+    fn parses_identity_lines() {
+        assert_eq!(
+            MinecraftJava.parse_identity("[22:52:49 INFO]: UUID of player Bacon_Dude117 is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"),
+            Some(("Bacon_Dude117".into(), Some("33f7864d-a02c-4e21-ae28-3ecf6f0fd767".into())))
+        );
+        assert_eq!(MinecraftJava.parse_identity("[22:52:49 INFO]: <bob> UUID of player Eve is 33f7864d-a02c-4e21-ae28-3ecf6f0fd767"), None);
+        assert_eq!(MinecraftJava.parse_identity("[22:52:49 INFO]: UUID of player Eve is nope"), None);
     }
 
     #[test]

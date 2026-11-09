@@ -16,6 +16,7 @@ use crate::java::JavaRuntimes;
 use crate::net::{self, Protocol};
 use crate::paths::AppPaths;
 use crate::playit::{Playit, TunnelInfo};
+use crate::players::{PlayerAction, PlayerBook, PlayersView};
 use crate::process::{Console, ServerProcess, ServerStatus};
 use crate::properties::Properties;
 
@@ -390,7 +391,20 @@ impl ServerManager {
         let spec = provider.launch(&self.ctx, &inst, &dir)?;
         let console = self.console(id);
         let parser_provider = provider.clone();
-        let parser: crate::process::LineParser = Arc::new(move |l: &str| parser_provider.parse_line(l));
+        let book = self.player_book(id);
+        let parser: crate::process::LineParser = Arc::new(move |l: &str| {
+            // Remember everyone who joins (and their account id) for the Players tab.
+            if let Some((name, pid)) = parser_provider.parse_identity(l) {
+                if let Err(e) = book.record(&name, pid.as_deref()) {
+                    tracing::warn!("could not record player {name}: {e}");
+                }
+            }
+            let ev = parser_provider.parse_line(l);
+            if let Some(crate::games::LineEvent::PlayerJoined(name)) = &ev {
+                let _ = book.record(name, None);
+            }
+            ev
+        });
         let proc = ServerProcess::spawn(id.to_owned(), &spec, parser, provider.stop_command(), console, self.sink.clone())?;
         if let Some(slot) = self.slots.lock().unwrap().get_mut(id) {
             slot.process = Some(proc);
@@ -504,6 +518,74 @@ impl ServerManager {
         self.store.save(&inst)?;
         self.changed();
         Ok(inst)
+    }
+
+    // ---- players ------------------------------------------------------------------------------
+
+    fn player_book(&self, id: &str) -> PlayerBook {
+        PlayerBook::new(self.paths.instance_dir(id).join("players.json"))
+    }
+
+    pub fn players(&self, id: &str) -> Result<PlayersView> {
+        let inst = self.store.get(id)?;
+        let provider = self.registry.get(&inst.game)?;
+        let admin = provider
+            .players()
+            .ok_or_else(|| Error::InvalidInput("Player management isn't available for this game yet.".into()))?;
+        let dir = self.paths.server_dir(id);
+        let proc = self.process(id);
+        let online = proc.as_ref().map(|p| p.players()).unwrap_or_default();
+        Ok(PlayersView {
+            caps: admin.caps(),
+            whitelist_enabled: admin.whitelist_enabled(&dir),
+            running: proc.is_some_and(|p| p.status() == ServerStatus::Running),
+            players: admin.list(&dir, &online, &self.player_book(id).load())?,
+        })
+    }
+
+    /// Changes a player's role, whitelist or ban state, or kicks / sets their game mode.
+    /// Uses console commands while the server runs and edits its files while it's stopped.
+    pub async fn player_action(&self, id: &str, name: &str, action: PlayerAction) -> Result<()> {
+        let _g = self.lifecycle.lock().await;
+        let inst = self.store.get(id)?;
+        if inst.install_state != InstallState::Installed {
+            return Err(Error::Conflict("This server isn't installed yet.".into()));
+        }
+        let provider = self.registry.get(&inst.game)?;
+        let admin = provider
+            .players()
+            .ok_or_else(|| Error::InvalidInput("Player management isn't available for this game yet.".into()))?;
+        let name = name.trim();
+        let dir = self.paths.server_dir(id);
+        let seen = self.player_book(id).load();
+
+        match self.process(id).map(|p| (p.status(), p)) {
+            Some((ServerStatus::Running, proc)) => {
+                // Validate before touching any file.
+                let commands = admin.commands(name, &action)?;
+                if admin.live_needs_file_write(&action) {
+                    admin.apply_offline(&self.ctx, &dir, name, &seen, &action).await?;
+                }
+                let console = self.console(id);
+                for c in commands {
+                    proc.send_command(&c).await?;
+                    console.push(LogStream::System, format!("> {c}"));
+                }
+            }
+            Some((ServerStatus::Starting | ServerStatus::Stopping, _)) => {
+                return Err(Error::Conflict("Wait until the server has finished starting or stopping.".into()));
+            }
+            _ => {
+                if action.needs_running() {
+                    return Err(Error::Conflict("Start the server first: the player has to be online for that.".into()));
+                }
+                admin.apply_offline(&self.ctx, &dir, name, &seen, &action).await?;
+                if let PlayerAction::Whitelist { on: true } = action {
+                    let _ = self.player_book(id).record(name, None);
+                }
+            }
+        }
+        Ok(())
     }
 
     // ---- sharing (playit) -------------------------------------------------------------------

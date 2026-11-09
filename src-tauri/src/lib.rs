@@ -87,6 +87,8 @@ pub fn run() {
             commands::console_lines,
             commands::get_properties,
             commands::set_properties,
+            commands::list_players,
+            commands::player_action,
             commands::open_server_folder,
             commands::open_link,
             commands::share_info,
