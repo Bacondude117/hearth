@@ -1,12 +1,22 @@
 name: Release
 
-# Push a tag like v0.1.0 to build the Windows installers and attach them to a draft release.
+# Builds the Windows installers and attaches them to a draft GitHub release.
+# Either push a tag like v0.1.0, or run this workflow from the Actions tab with a version:
+# the tag is then created on the commit the workflow runs on.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to create, e.g. v0.1.0 (must match the app version)"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.version || github.ref_name }}
 
 jobs:
   release:
@@ -24,7 +34,12 @@ jobs:
         id: notes
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
+          app_version=$(node -p "require('./package.json').version")
+          if [ "$version" != "$app_version" ]; then
+            echo "::error::Tag $TAG does not match the app version $app_version"
+            exit 1
+          fi
           awk -v v="$version" '
             $0 ~ "^## \\[" v "\\]" { found=1; next }
             found && /^## \[/ { exit }
@@ -42,8 +57,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Hearth ${{ github.ref_name }}
+          tagName: ${{ env.TAG }}
+          releaseName: Hearth ${{ env.TAG }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
