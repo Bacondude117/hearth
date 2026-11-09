@@ -161,6 +161,8 @@ impl GameProvider for MinecraftJava {
                 links: vec![("Minecraft EULA", "https://aka.ms/MinecraftEULA")],
             }),
             playit_tunnel_type: Some("minecraft-java"),
+            command_hint: "Type a command, e.g. say hello or op YourName",
+            setup_note: None,
         }
     }
 

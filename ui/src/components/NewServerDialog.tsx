@@ -197,6 +197,8 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
           </label>
         </div>
 
+        {game.setupNote && <p className="banner info small">{game.setupNote}</p>}
+
         {game.configurableMemory && (
           <label className="field">
             <span>

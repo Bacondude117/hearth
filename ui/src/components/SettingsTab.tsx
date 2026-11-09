@@ -6,8 +6,8 @@ import { useToast } from "./Toasts";
 
 type Field =
   | { key: string; label: string; kind: "text"; hint?: string }
-  | { key: string; label: string; kind: "number"; min: number; max: number; hint?: string }
-  | { key: string; label: string; kind: "bool"; hint?: string }
+  | { key: string; label: string; kind: "number"; min: number; max: number; step?: number; hint?: string; port?: boolean }
+  | { key: string; label: string; kind: "bool"; hint?: string; pascal?: boolean }
   | { key: string; label: string; kind: "select"; options: string[]; hint?: string };
 
 const JAVA_FIELDS: Field[] = [
@@ -20,7 +20,7 @@ const JAVA_FIELDS: Field[] = [
   { key: "online-mode", label: "Require Minecraft accounts", kind: "bool", hint: "Turn off only if you know why (cracked clients)." },
   { key: "allow-flight", label: "Allow flight", kind: "bool" },
   { key: "view-distance", label: "View distance", kind: "number", min: 3, max: 32 },
-  { key: "server-port", label: "Port", kind: "number", min: 1024, max: 65535 },
+  { key: "server-port", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
   { key: "level-seed", label: "World seed", kind: "text", hint: "Only used when a new world is generated." },
 ];
 
@@ -33,9 +33,31 @@ const BEDROCK_FIELDS: Field[] = [
   { key: "allow-list", label: "Allow list only", kind: "bool", hint: "Add players with: allowlist add Name" },
   { key: "online-mode", label: "Require Xbox sign-in", kind: "bool" },
   { key: "view-distance", label: "View distance", kind: "number", min: 5, max: 96 },
-  { key: "server-port", label: "Port", kind: "number", min: 1024, max: 65535 },
+  { key: "server-port", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
   { key: "level-seed", label: "World seed", kind: "text", hint: "Only used when a new world is generated." },
 ];
+
+const PALWORLD_FIELDS: Field[] = [
+  { key: "ServerName", label: "Server name", kind: "text" },
+  { key: "ServerDescription", label: "Description", kind: "text" },
+  { key: "ServerPassword", label: "Join password", kind: "text", hint: "Leave empty so anyone with the address can join." },
+  { key: "ServerPlayerMaxNum", label: "Max players", kind: "number", min: 1, max: 32 },
+  { key: "Difficulty", label: "Difficulty", kind: "select", options: ["None", "Casual", "Normal", "Hard"] },
+  { key: "DeathPenalty", label: "On death, drop", kind: "select", options: ["None", "Item", "ItemAndEquipment", "All"] },
+  { key: "ExpRate", label: "EXP rate", kind: "number", min: 0.1, max: 20, step: 0.1 },
+  { key: "PalCaptureRate", label: "Capture rate", kind: "number", min: 0.5, max: 2, step: 0.1 },
+  { key: "DayTimeSpeedRate", label: "Day speed", kind: "number", min: 0.1, max: 5, step: 0.1 },
+  { key: "bIsPvP", label: "Player vs player", kind: "bool", pascal: true },
+  { key: "bEnableFastTravel", label: "Fast travel", kind: "bool", pascal: true },
+  { key: "PublicPort", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
+  { key: "AdminPassword", label: "Admin password", kind: "text", hint: "Hearth uses this to control the server. Players can type it in chat with /AdminPassword." },
+];
+
+const FIELDS: Record<string, Field[]> = {
+  "minecraft-java": JAVA_FIELDS,
+  "minecraft-bedrock": BEDROCK_FIELDS,
+  palworld: PALWORLD_FIELDS,
+};
 
 interface Props {
   server: Server;
@@ -57,6 +79,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
   const [updateOpen, setUpdateOpen] = useState(false);
   const installed = server.installState.state === "installed";
   const active = isActive(server.status);
+  const latestOnly = server.version === "latest";
 
   const load = () =>
     api.getProperties(server.id).then(
@@ -78,7 +101,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
   const values = useMemo(() => new Map(props ?? []), [props]);
   const val = (k: string) => edits[k] ?? values.get(k) ?? "";
   const set = (k: string, v: string) => setEdits((e) => ({ ...e, [k]: v }));
-  const fields = (server.game === "minecraft-bedrock" ? BEDROCK_FIELDS : JAVA_FIELDS).filter((f) => values.has(f.key) || f.key === "server-port");
+  const fields = (FIELDS[server.game] ?? []).filter((f) => values.has(f.key) || (f.kind === "number" && f.port));
   const dirty = Object.keys(edits).some((k) => edits[k] !== values.get(k));
   const metaDirty = name.trim() !== server.name || (game?.configurableMemory && memory !== server.memoryMb);
   const maxMemory = Math.max(1024, Math.min(32768, Math.floor(((info.totalMemoryMb ?? 8192) - 2048) / 512) * 512));
@@ -143,7 +166,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
           ) : (
             <div className="grid2">
               {fields.map((f) => (
-                <FieldInput key={f.key} field={f} value={f.key === "server-port" ? val(f.key) || String(server.port) : val(f.key)} onChange={(v) => set(f.key, v)} />
+                <FieldInput key={f.key} field={f} value={f.kind === "number" && f.port ? val(f.key) || String(server.port) : val(f.key)} onChange={(v) => set(f.key, v)} />
               ))}
             </div>
           )}
@@ -191,17 +214,19 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
         <h3>Maintenance</h3>
         <div className="maint">
           <div>
-            <strong>{server.game === "minecraft-bedrock" ? "Update to the latest Bedrock server" : "Change version"}</strong>
+            <strong>{latestOnly ? `Update to the latest ${game?.name ?? ""} server` : "Change version"}</strong>
             <p className="muted">
               {server.pack
                 ? `This server came from the ${server.pack.name} modpack, so its Minecraft version is fixed. Changing it would break the mods.`
-                : server.game === "minecraft-bedrock"
+                : server.game === "palworld"
+                  ? "Downloads the newest Palworld server through Steam. Players can only join a server on the same version as their game, so update after every Palworld patch. Worlds and settings are kept."
+                  : server.game === "minecraft-bedrock"
                 ? "Bedrock players can only join a server on the same version as their game. Worlds and settings are kept."
                 : "Downloads a different server version. Worlds and settings are kept. Back up first: worlds can't be opened by older versions."}
             </p>
           </div>
           <button className="btn" disabled={active || !installed || !!server.pack} onClick={() => setUpdateOpen(true)}>
-            {server.game === "minecraft-bedrock" ? "Update" : "Change…"}
+            {latestOnly ? "Update" : "Change…"}
           </button>
         </div>
         <div className="maint">
@@ -249,7 +274,14 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
     <label className={field.kind === "bool" ? "field toggle-field" : "field"} htmlFor={id}>
       <span>{field.label}</span>
       {field.kind === "bool" ? (
-        <input id={id} type="checkbox" role="switch" className="switch" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} />
+        <input
+          id={id}
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={value.toLowerCase() === "true"}
+          onChange={(e) => onChange(field.pascal ? (e.target.checked ? "True" : "False") : String(e.target.checked))}
+        />
       ) : field.kind === "select" ? (
         <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
           {!field.options.includes(value) && <option value={value}>{value || "(default)"}</option>}
@@ -260,7 +292,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           ))}
         </select>
       ) : field.kind === "number" ? (
-        <input id={id} type="number" min={field.min} max={field.max} value={value} onChange={(e) => onChange(e.target.value)} />
+        <input id={id} type="number" min={field.min} max={field.max} step={field.step ?? 1} value={value} onChange={(e) => onChange(e.target.value)} />
       ) : (
         <input id={id} value={value} onChange={(e) => onChange(e.target.value)} />
       )}
@@ -274,7 +306,7 @@ function UpdateDialog({ open, server, onClose }: { open: boolean; server: Server
   const [versions, setVersions] = useState<GameVersion[] | null>(null);
   const [version, setVersion] = useState(server.version);
   const [busy, setBusy] = useState(false);
-  const bedrock = server.game === "minecraft-bedrock";
+  const bedrock = server.version === "latest";
 
   useEffect(() => {
     if (!open) return;
@@ -300,7 +332,7 @@ function UpdateDialog({ open, server, onClose }: { open: boolean; server: Server
     <Modal
       open={open}
       onClose={onClose}
-      title={bedrock ? "Update Bedrock server" : "Change Minecraft version"}
+      title={bedrock ? "Update server" : "Change Minecraft version"}
       locked={busy}
       footer={
         <>

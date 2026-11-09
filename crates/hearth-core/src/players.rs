@@ -45,6 +45,8 @@ pub struct PlayerCaps {
     pub roles: Vec<Role>,
     pub can_ban: bool,
     pub game_modes: Vec<&'static str>,
+    /// Whether the game has a whitelist at all.
+    pub has_whitelist: bool,
     /// "Whitelist" (Java) or "Allow list" (Bedrock).
     pub whitelist_label: &'static str,
     /// Roles can only be changed for players whose id is known (Bedrock needs an XUID).
@@ -91,6 +93,18 @@ pub trait PlayerAdmin: Send + Sync {
 
     /// Console commands that perform `action` on a running server.
     fn commands(&self, name: &str, action: &PlayerAction) -> Result<Vec<String>>;
+
+    /// For games managed through an admin API instead of console commands: perform `action`
+    /// on the running server. `None` means "use `commands`".
+    async fn apply_live(
+        &self,
+        _server_dir: &Path,
+        _name: &str,
+        _seen: &[SeenPlayer],
+        _action: &PlayerAction,
+    ) -> Option<Result<()>> {
+        None
+    }
 
     /// Applies `action` by editing files while the server is stopped.
     async fn apply_offline(

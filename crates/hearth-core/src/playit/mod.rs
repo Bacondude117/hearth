@@ -368,7 +368,9 @@ impl Playit {
             .find(|t| t.local_port == Some(local_port) && (t.protocol == protocol || t.protocol == "both")))
     }
 
-    pub async fn create_tunnel(&self, tunnel_type: &str, port_type: &str, local_port: u16, name: &str) -> Result<String> {
+    /// `tunnel_type` is playit's game preset (e.g. `minecraft-java`), or `None` for a plain
+    /// TCP/UDP tunnel.
+    pub async fn create_tunnel(&self, tunnel_type: Option<&str>, port_type: &str, local_port: u16, name: &str) -> Result<String> {
         let data = self.rundata(true).await?;
         let id = self.api()?.create_tunnel(&data.agent_id, tunnel_type, port_type, local_port, name).await?;
         *self.rundata.lock().unwrap() = None;

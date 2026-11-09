@@ -38,6 +38,8 @@ const FLAVOR_NAMES: Record<string, string> = {
 
 export function flavorLabel(s: Server): string {
   if (s.game === "minecraft-bedrock") return s.installedBuild ? `Bedrock ${s.installedBuild}` : "Bedrock";
+  // Steam games always run the latest build.
+  if (s.version === "latest") return s.installedBuild ? `Dedicated server · ${s.installedBuild}` : "Dedicated server";
   if (s.pack) return `${s.pack.name} · ${FLAVOR_NAMES[s.flavor] ?? s.flavor} ${s.version}`;
   return `${FLAVOR_NAMES[s.flavor] ?? s.flavor} ${s.version}`;
 }

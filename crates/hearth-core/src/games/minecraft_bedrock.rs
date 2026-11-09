@@ -103,6 +103,8 @@ impl GameProvider for MinecraftBedrock {
                 ],
             }),
             playit_tunnel_type: Some("minecraft-bedrock"),
+            command_hint: "Type a command, e.g. say hello or op \"Your Gamertag\"",
+            setup_note: None,
         }
     }
 
@@ -168,8 +170,8 @@ impl GameProvider for MinecraftBedrock {
         parse_bedrock_line(line)
     }
 
-    fn ports_used(&self, port: u16) -> Vec<u16> {
-        vec![port, port.saturating_add(1)]
+    fn ports_used(&self, port: u16) -> Vec<(u16, Protocol)> {
+        vec![(port, Protocol::Udp), (port.saturating_add(1), Protocol::Udp)]
     }
 
     fn players(&self) -> Option<&dyn crate::players::PlayerAdmin> {

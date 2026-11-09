@@ -83,6 +83,8 @@ export interface GameInfo {
   configurableMemory: boolean;
   eula: { text: string; links: [string, string][] } | null;
   playitTunnelType: string | null;
+  commandHint: string;
+  setupNote: string | null;
 }
 
 export interface GameVersion {
@@ -124,6 +126,7 @@ export interface PlayersView {
     roles: Role[];
     canBan: boolean;
     gameModes: string[];
+    hasWhitelist: boolean;
     whitelistLabel: string;
     roleNeedsId: boolean;
   };

@@ -107,6 +107,7 @@ impl PlayerAdmin for BedrockPlayers {
             roles: vec![Role::Visitor, Role::Member, Role::Operator],
             can_ban: false,
             game_modes: GAME_MODES.to_vec(),
+            has_whitelist: true,
             whitelist_label: "Allow list",
             role_needs_id: true,
         }
@@ -214,12 +215,11 @@ impl PlayerAdmin for BedrockPlayers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     fn ctx(dir: &Path) -> GameContext {
         let paths = crate::paths::AppPaths::new(dir);
         let client = crate::http::client();
-        GameContext { java: Arc::new(crate::java::JavaRuntimes::new(paths.clone(), client.clone())), client, paths }
+        GameContext::new(paths, client)
     }
 
     fn seen(name: &str, xuid: &str) -> SeenPlayer {

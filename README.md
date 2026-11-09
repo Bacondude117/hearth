@@ -1,6 +1,6 @@
 # Hearth
 
-**Host game servers on your own PC.** Pick a game, click create, and Hearth downloads and
+**Host game servers on your own PC** (Minecraft Java & Bedrock, modded Minecraft, Palworld). Pick a game, click create, and Hearth downloads and
 runs everything it needs, including the right Java version. One click shares the server online
 through [playit.gg](https://playit.gg), so friends can join without router setup or port forwarding.
 
@@ -9,6 +9,7 @@ through [playit.gg](https://playit.gg), so friends can join without router setup
 ## Features
 
 - **Minecraft: Java Edition**: Paper (recommended), Vanilla, or modded with **Fabric, NeoForge or Forge**
+- **Palworld**: installed and updated through Steam, with players, kick/ban, broadcast and settings
 - **Modpacks**: import a Modrinth `.mrpack` or a pack's server pack `.zip`, and manage mods/plugins from the **Mods** tab
 - **Minecraft: Bedrock Edition**: Mojang's official Bedrock Dedicated Server, with one-click updates that keep your worlds
 - **No Java install needed**: Hearth downloads the right Eclipse Temurin runtime for each Minecraft version

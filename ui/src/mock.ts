@@ -26,6 +26,8 @@ const games: GameInfo[] = [
       links: [["Minecraft EULA", "https://aka.ms/MinecraftEULA"]],
     },
     playitTunnelType: "minecraft-java",
+    commandHint: "Type a command, e.g. say hello or op YourName",
+    setupNote: null,
   },
   {
     id: "minecraft-bedrock",
@@ -43,6 +45,21 @@ const games: GameInfo[] = [
       ],
     },
     playitTunnelType: "minecraft-bedrock",
+    commandHint: 'Type a command, e.g. say hello or op "Your Gamertag"',
+    setupNote: null,
+  },
+  {
+    id: "palworld",
+    name: "Palworld",
+    description: 'Creature-collecting survival. Friends join from "Join Multiplayer Game" with your address.',
+    flavors: [{ id: "steam", name: "Dedicated server", description: "Pocketpair's official dedicated server, installed through Steam." }],
+    defaultPort: 8211,
+    protocol: "udp",
+    configurableMemory: false,
+    eula: null,
+    playitTunnelType: null,
+    commandHint: "Broadcast a message to everyone in the game",
+    setupNote: "Palworld servers need a lot of memory: 8 GB at minimum, 16 GB or more recommended. The first install downloads about 4 GB through Steam.",
   },
 ];
 
@@ -78,6 +95,14 @@ const servers: Server[] = [
     launch: null, pack: null, content: null,
   },
 ];
+
+servers.push({
+  id: "pals-9c0d", name: "Pal Island", game: "palworld", flavor: "steam", version: "latest",
+  installedBuild: "build 20481234", port: 8211, memoryMb: null, javaMajor: null, jvmArgs: [],
+  installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
+  status: { state: "running" }, players: ["Bacon_Dude117", "PalTamer"], protocol: "udp", gameName: "Palworld",
+  launch: null, pack: null, content: null,
+});
 
 const contentStore = new Map<string, ContentEntry[]>([
   ["cobblemon-7a8b", [
@@ -115,6 +140,11 @@ const playerStore = new Map<string, MockPlayer[]>([
     { name: "Notch", id: "069a79f4-44e9-4726-a5be-fca90e38aaf5", role: "player", whitelisted: false, banned: false, banReason: null },
     { name: "Griefer99", id: "1c2d3e4f-0000-4000-8000-000000000099", role: "player", whitelisted: false, banned: true, banReason: "TNT in spawn" },
     { name: "Bacon_Dude117", id: "33f7864d-a02c-4e21-ae28-3ecf6f0fd767", role: "operator", whitelisted: true, banned: false, banReason: null },
+  ]],
+  ["pals-9c0d", [
+    { name: "Bacon_Dude117", id: "steam_76561198000000001", role: "player", whitelisted: false, banned: false, banReason: null },
+    { name: "PalTamer", id: "steam_76561198000000002", role: "player", whitelisted: false, banned: false, banReason: null },
+    { name: "Griefer", id: "steam_76561198000000003", role: "player", whitelisted: false, banned: true, banReason: null },
   ]],
   ["bedrock-5e6f", [
     { name: "Cool Guy 22", id: "2535412345", role: "operator", whitelisted: true, banned: false, banReason: null },
@@ -157,6 +187,14 @@ for (const l of [
 ]) log("survival-1a2b", `[${t()} INFO]: ${l}`);
 log("creative-3c4d", "Installation complete. Press Start to launch the server.", "system");
 
+props.set("pals-9c0d", [
+  ["ServerName", "Pal Island"], ["ServerDescription", "Friends only"], ["ServerPassword", ""], ["ServerPlayerMaxNum", "8"],
+  ["Difficulty", "None"], ["DeathPenalty", "Item"], ["ExpRate", "1.500000"], ["PalCaptureRate", "1.000000"],
+  ["DayTimeSpeedRate", "1.000000"], ["bIsPvP", "False"], ["bEnableFastTravel", "True"], ["PublicPort", "8211"],
+  ["AdminPassword", "3f9a1c0b7e22d4a8b5c61e90"], ["RESTAPIEnabled", "True"], ["RESTAPIPort", "8212"],
+]);
+log("pals-9c0d", "Starting PalServer-Win64-Shipping-Cmd.exe", "system");
+log("pals-9c0d", "[2026-11-09 18:02:11] [LOG] Running Palworld dedicated server on :8211");
 props.set("survival-1a2b", [
   ["motd", "Survival"], ["max-players", "20"], ["gamemode", "survival"], ["difficulty", "normal"],
   ["pvp", "true"], ["online-mode", "true"], ["white-list", "false"], ["view-distance", "10"],
@@ -202,7 +240,9 @@ const handlers: Record<string, (a: any) => unknown> = {
   app_info: () => ({ version: "0.1.0-dev", dataDir: "C:\\Users\\you\\AppData\\Roaming\\app.hearth.desktop", totalMemoryMb: 16384, playitSupported: true }),
   games: () => games,
   versions: ({ game, flavor }) =>
-    ["fabric", "forge", "neoforge"].includes(flavor)
+    game === "palworld"
+      ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
+      : ["fabric", "forge", "neoforge"].includes(flavor)
       ? ["26.3", "26.2", "26.1.2", "1.21.1", "1.20.1"].map((v) => ({ id: v, label: v, stable: true }))
       : game === "minecraft-bedrock"
       ? [{ id: "latest", label: "Latest (1.26.63.1)", stable: true }]
@@ -215,7 +255,7 @@ const handlers: Record<string, (a: any) => unknown> = {
             { id: "1.21.11", label: "1.21.11", stable: true },
           ]
         : ["26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10"].map((v) => ({ id: v, label: v, stable: true })),
-  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : 25567),
+  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : 25567),
   list_servers: () => servers,
   get_server: ({ id }) => find(id),
   create_server: ({ req }) => {
@@ -278,10 +318,12 @@ const handlers: Record<string, (a: any) => unknown> = {
     const list = (playerStore.get(id) ?? []).map((p) => ({ ...p, online: s.players.includes(p.name) }));
     list.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     return {
-      caps: bedrock
-        ? { roles: ["visitor", "member", "operator"], canBan: false, gameModes: ["survival", "creative", "adventure", "spectator"], whitelistLabel: "Allow list", roleNeedsId: true }
-        : { roles: ["player", "operator"], canBan: true, gameModes: ["survival", "creative", "adventure", "spectator"], whitelistLabel: "Whitelist", roleNeedsId: false },
-      whitelistEnabled: !bedrock,
+      caps: s.game === "palworld"
+        ? { roles: [], canBan: true, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
+        : bedrock
+          ? { roles: ["visitor", "member", "operator"], canBan: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
+          : { roles: ["player", "operator"], canBan: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
+      whitelistEnabled: !bedrock && s.game !== "palworld",
       running: s.status.state === "running",
       players: list,
     };

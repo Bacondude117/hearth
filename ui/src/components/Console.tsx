@@ -109,7 +109,7 @@ export function Console({ consoleId, load, onCommand, canSend = true, placeholde
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder={canSend ? (placeholder ?? "Type a command, e.g. say hello or op YourName") : "Start the server to send commands"}
+            placeholder={canSend ? (placeholder ?? "Type a command") : "Start the server to send commands"}
             disabled={!canSend}
             aria-label="Console command"
             spellCheck={false}

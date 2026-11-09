@@ -118,7 +118,7 @@ impl PlayitApi {
     pub async fn create_tunnel(
         &self,
         agent_id: &str,
-        tunnel_type: &str,
+        tunnel_type: Option<&str>,
         port_type: &str,
         local_port: u16,
         name: &str,
@@ -144,7 +144,7 @@ pub(crate) const CREATE_TUNNEL_PATH: &str = "/tunnels/create";
 
 pub(crate) fn create_tunnel_request(
     agent_id: &str,
-    tunnel_type: &str,
+    tunnel_type: Option<&str>,
     port_type: &str,
     local_port: u16,
     name: &str,
@@ -261,7 +261,7 @@ mod tests {
     /// The exact body that playit accepted in a real test (2026-11-09). playit rejects the
     /// `/v1/tunnels/create` shape with "failed to parse body"; `/tunnels/create` works.
     fn create_request_matches_what_playit_accepts() {
-        let r = create_tunnel_request("e05f684d-d21f-424d-a272-6828d10e60d7", "minecraft-java", "tcp", 25599, "Hearth: S");
+        let r = create_tunnel_request("e05f684d-d21f-424d-a272-6828d10e60d7", Some("minecraft-java"), "tcp", 25599, "Hearth: S");
         assert_eq!(
             r,
             serde_json::json!({
@@ -281,5 +281,9 @@ mod tests {
             })
         );
         assert_eq!(CREATE_TUNNEL_PATH, "/tunnels/create");
+        // Games without a playit preset get a plain UDP/TCP tunnel.
+        let r = create_tunnel_request("a", None, "udp", 8211, "Hearth: P");
+        assert!(r["tunnel_type"].is_null());
+        assert_eq!(r["port_type"], "udp");
     }
 }

@@ -126,6 +126,16 @@ button { font: inherit; color: inherit; }
     linear-gradient(#5aa335 0 34%, transparent 34%),
     repeating-linear-gradient(90deg, #8a5a33 0 25%, #7a4e2b 25% 50%);
 }
+.game-icon.palworld {
+  /* paw print */
+  background:
+    radial-gradient(ellipse 22% 18% at 50% 66%, #fff 0 98%, transparent 100%),
+    radial-gradient(circle at 26% 44%, #fff 0 9%, transparent 10%),
+    radial-gradient(circle at 41% 30%, #fff 0 9%, transparent 10%),
+    radial-gradient(circle at 59% 30%, #fff 0 9%, transparent 10%),
+    radial-gradient(circle at 74% 44%, #fff 0 9%, transparent 10%),
+    linear-gradient(160deg, #3fb8c9, #2470a8);
+}
 .game-icon.minecraft-bedrock {
   background:
     linear-gradient(#e0e0e0 0 30%, transparent 30%),

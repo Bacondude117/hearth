@@ -8,6 +8,9 @@ pub mod mc_loaders;
 pub mod mc_packs;
 pub mod minecraft_bedrock;
 pub mod minecraft_java;
+pub mod palworld;
+pub mod palworld_api;
+pub mod palworld_settings;
 
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
@@ -31,6 +34,18 @@ pub struct GameContext {
     pub client: reqwest::Client,
     pub paths: AppPaths,
     pub java: Arc<JavaRuntimes>,
+    pub steam: Arc<crate::steamcmd::SteamCmd>,
+}
+
+impl GameContext {
+    pub fn new(paths: AppPaths, client: reqwest::Client) -> Self {
+        Self {
+            java: Arc::new(JavaRuntimes::new(paths.clone(), client.clone())),
+            steam: Arc::new(crate::steamcmd::SteamCmd::new(paths.clone(), client.clone())),
+            client,
+            paths,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -46,8 +61,13 @@ pub struct GameInfo {
     pub configurable_memory: bool,
     /// Terms the user must accept before installing.
     pub eula: Option<Eula>,
-    /// Name of the playit tunnel type for this game, if playit has one.
+    /// Name of the playit tunnel type for this game, if playit has one (otherwise a plain
+    /// TCP/UDP tunnel is created).
     pub playit_tunnel_type: Option<&'static str>,
+    /// Placeholder for the console input ("Type a command…" or "Broadcast a message…").
+    pub command_hint: &'static str,
+    /// Shown under the version picker when creating a server (hardware advice, etc.).
+    pub setup_note: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -132,9 +152,51 @@ pub trait GameProvider: Send + Sync {
         Some("server.properties")
     }
 
-    /// Every port the server binds for a given main port (Bedrock also binds an IPv6 port).
-    fn ports_used(&self, port: u16) -> Vec<u16> {
-        vec![port]
+    /// Every port the server binds for a given main port, with its protocol (Bedrock also binds
+    /// an IPv6 port; Palworld a TCP admin port).
+    fn ports_used(&self, port: u16) -> Vec<(u16, Protocol)> {
+        vec![(port, self.info().protocol)]
+    }
+
+    /// The settings key that holds the main port.
+    fn port_setting_key(&self) -> &'static str {
+        "server-port"
+    }
+
+    /// User-editable settings, in file order.
+    fn read_settings(&self, server_dir: &Path) -> Result<Vec<(String, String)>> {
+        match self.properties_file() {
+            Some(f) => Ok(crate::properties::Properties::load(&server_dir.join(f))?.entries()),
+            None => Ok(vec![]),
+        }
+    }
+
+    /// Writes changed settings (the port key is handled separately via `apply_port`).
+    fn write_settings(&self, server_dir: &Path, changes: &[(String, String)]) -> Result<()> {
+        let Some(f) = self.properties_file() else { return Ok(()) };
+        let path = server_dir.join(f);
+        let mut props = crate::properties::Properties::load(&path)?;
+        for (k, v) in changes {
+            props.set(k, v.clone());
+        }
+        props.save(&path)
+    }
+
+    /// For servers without a console: poll their admin API. `Some(Ok(players))` also means the
+    /// server is ready. `None` means this game reports through its log instead.
+    async fn poll(&self, _ctx: &GameContext, _inst: &Instance, _server_dir: &Path) -> Option<Result<Vec<RemotePlayer>>> {
+        None
+    }
+
+    /// Asks the server to save and shut down through its admin API. Returns true if it accepted,
+    /// in which case Hearth only waits for the process to exit.
+    async fn remote_stop(&self, _ctx: &GameContext, _inst: &Instance, _server_dir: &Path) -> bool {
+        false
+    }
+
+    /// Handles a line typed in the console box when the game has no stdin console.
+    async fn console_input(&self, _ctx: &GameContext, _inst: &Instance, _server_dir: &Path, _line: &str) -> Option<Result<()>> {
+        None
     }
 
     /// Writes the port into the game's config.
@@ -167,6 +229,13 @@ pub trait GameProvider: Send + Sync {
     }
 }
 
+/// A player reported by a game's admin API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemotePlayer {
+    pub name: String,
+    pub id: Option<String>,
+}
+
 pub struct Registry {
     providers: Vec<Arc<dyn GameProvider>>,
 }
@@ -177,6 +246,7 @@ impl Registry {
             providers: vec![
                 Arc::new(minecraft_java::MinecraftJava),
                 Arc::new(minecraft_bedrock::MinecraftBedrock),
+                Arc::new(palworld::Palworld),
             ],
         }
     }

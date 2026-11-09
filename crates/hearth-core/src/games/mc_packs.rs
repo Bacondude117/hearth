@@ -661,7 +661,7 @@ mod tests {
         let dir = tmp.path().join("server");
         let paths = crate::paths::AppPaths::new(tmp.path());
         let client = crate::http::client();
-        let ctx = GameContext { java: std::sync::Arc::new(crate::java::JavaRuntimes::new(paths.clone(), client.clone())), client, paths };
+        let ctx = GameContext::new(paths, client);
         unpack(&ctx, &p, &dir, &|_, _| {}).await.unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("mods/a.jar")).unwrap(), "a");
         assert!(dir.join("config/c.toml").exists());

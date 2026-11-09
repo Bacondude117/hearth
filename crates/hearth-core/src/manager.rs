@@ -12,7 +12,6 @@ use crate::error::{Error, Result};
 use crate::events::{Event, EventSink, LogLine, LogStream};
 use crate::games::{GameContext, GameInfo, GameProvider, GameVersion, Registry};
 use crate::instance::{InstallState, Instance, InstanceStore};
-use crate::java::JavaRuntimes;
 use crate::net::{self, Protocol};
 use crate::paths::AppPaths;
 use crate::playit::{Playit, TunnelInfo};
@@ -21,7 +20,6 @@ use crate::content::{self, ContentEntry, ContentFolder};
 use crate::instance::PackSource;
 use crate::packs::PackInfo;
 use crate::process::{Console, ServerProcess, ServerStatus};
-use crate::properties::Properties;
 
 pub const STOP_TIMEOUT: Duration = Duration::from_secs(45);
 pub const MIN_MEMORY_MB: u32 = 512;
@@ -86,8 +84,7 @@ impl ServerManager {
     pub fn new(root: impl Into<PathBuf>, sink: Arc<dyn EventSink>) -> Arc<Self> {
         let paths = AppPaths::new(root);
         let client = crate::http::client();
-        let java = Arc::new(JavaRuntimes::new(paths.clone(), client.clone()));
-        let ctx = Arc::new(GameContext { client: client.clone(), paths: paths.clone(), java });
+        let ctx = Arc::new(GameContext::new(paths.clone(), client.clone()));
         let playit = Playit::new(paths.clone(), client, sink.clone());
         let mgr = Arc::new(Self {
             store: InstanceStore::new(paths.clone()),
@@ -185,7 +182,7 @@ impl ServerManager {
             .into_iter()
             .filter(|i| Some(i.id.as_str()) != except)
             .flat_map(|i| match self.registry.get(&i.game) {
-                Ok(p) => p.ports_used(i.port),
+                Ok(p) => p.ports_used(i.port).into_iter().map(|(n, _)| n).collect(),
                 Err(_) => vec![i.port],
             })
             .collect()
@@ -198,7 +195,7 @@ impl ServerManager {
         let mut port = info.default_port;
         loop {
             let used = p.ports_used(port);
-            if used.iter().all(|u| !reserved.contains(u) && net::port_is_free(*u, info.protocol)) {
+            if used.iter().all(|(u, proto)| !reserved.contains(u) && net::port_is_free(*u, *proto)) {
                 return Ok(port);
             }
             port = port
@@ -290,7 +287,7 @@ impl ServerManager {
             return Err(Error::InvalidInput("Pick a port between 1024 and 65535.".into()));
         }
         let reserved = self.reserved_ports(except);
-        if let Some(p) = provider.ports_used(port).into_iter().find(|p| reserved.contains(p)) {
+        if let Some((p, _)) = provider.ports_used(port).into_iter().find(|(p, _)| reserved.contains(p)) {
             return Err(Error::Conflict(format!("Port {p} is already used by another server in Hearth.")));
         }
         Ok(())
@@ -421,8 +418,7 @@ impl ServerManager {
             return Err(Error::Conflict("This server isn't installed yet.".into()));
         }
         let provider = self.registry.get(&inst.game)?;
-        let protocol = provider.info().protocol;
-        for p in provider.ports_used(inst.port) {
+        for (p, protocol) in provider.ports_used(inst.port) {
             if !net::port_is_free(p, protocol) {
                 return Err(Error::Conflict(format!(
                     "Port {p} is already in use by another program. Close it or change this server's port in Settings."
@@ -449,17 +445,74 @@ impl ServerManager {
         });
         let proc = ServerProcess::spawn(id.to_owned(), &spec, parser, provider.stop_command(), console, self.sink.clone())?;
         if let Some(slot) = self.slots.lock().unwrap().get_mut(id) {
-            slot.process = Some(proc);
+            slot.process = Some(proc.clone());
         }
+        self.spawn_monitor(provider, inst, dir, proc);
         Ok(())
+    }
+
+    /// For games reporting through an admin API: poll it for readiness and online players
+    /// while the process lives. Stops immediately for games that don't poll.
+    fn spawn_monitor(&self, provider: Arc<dyn GameProvider>, inst: Instance, dir: PathBuf, proc: Arc<ServerProcess>) {
+        let ctx = self.ctx.clone();
+        let book = self.player_book(&inst.id);
+        tokio::spawn(async move {
+            let mut ready = false;
+            loop {
+                tokio::time::sleep(Duration::from_secs(if ready { 10 } else { 3 })).await;
+                if proc.has_exited() || proc.status() == ServerStatus::Stopping {
+                    if proc.has_exited() {
+                        break;
+                    }
+                    continue;
+                }
+                match provider.poll(&ctx, &inst, &dir).await {
+                    None => break,
+                    Some(Ok(players)) => {
+                        if !ready {
+                            ready = true;
+                            proc.force_running();
+                        }
+                        for p in &players {
+                            let _ = book.record(&p.name, p.id.as_deref());
+                        }
+                        proc.set_players(players.into_iter().map(|p| p.name).collect());
+                    }
+                    Some(Err(e)) => {
+                        if ready {
+                            tracing::debug!("poll failed: {e}");
+                        }
+                    }
+                }
+            }
+        });
     }
 
     pub async fn stop(&self, id: &str) -> Result<()> {
         let _g = self.lifecycle.lock().await;
         if let Some(p) = self.process(id) {
-            p.stop(STOP_TIMEOUT).await;
+            self.stop_process(id, &p).await;
         }
         Ok(())
+    }
+
+    /// Graceful stop: console `stop` command, or the game's admin API for console-less games.
+    async fn stop_process(&self, id: &str, p: &Arc<ServerProcess>) {
+        if p.has_exited() {
+            return;
+        }
+        if let Ok(inst) = self.store.get(id) {
+            if let Ok(provider) = self.registry.get(&inst.game) {
+                if provider.stop_command().is_empty() {
+                    self.console(id).push(LogStream::System, "Saving and stopping server...");
+                    if !provider.remote_stop(&self.ctx, &inst, &self.paths.server_dir(id)).await {
+                        self.console(id).push(LogStream::System, "The server didn't answer; forcing it to close.");
+                        p.kill();
+                    }
+                }
+            }
+        }
+        p.stop(STOP_TIMEOUT).await;
     }
 
     pub async fn restart(&self, id: &str) -> Result<()> {
@@ -477,6 +530,13 @@ impl ServerManager {
 
     pub async fn command(&self, id: &str, line: &str) -> Result<()> {
         let p = self.process(id).ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
+        let inst = self.store.get(id)?;
+        let provider = self.registry.get(&inst.game)?;
+        if let Some(r) = provider.console_input(&self.ctx, &inst, &self.paths.server_dir(id), line).await {
+            r?;
+            self.console(id).push(LogStream::System, format!("> (broadcast) {line}"));
+            return Ok(());
+        }
         p.send_command(line).await?;
         self.console(id).push(LogStream::System, format!("> {line}"));
         Ok(())
@@ -488,8 +548,14 @@ impl ServerManager {
 
     /// Stops every running server (app exit).
     pub async fn shutdown(&self) {
-        let procs: Vec<_> = self.slots.lock().unwrap().values().filter_map(|s| s.process.clone()).collect();
-        futures_util::future::join_all(procs.iter().map(|p| p.stop(STOP_TIMEOUT))).await;
+        let procs: Vec<(String, Arc<ServerProcess>)> = self
+            .slots
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(id, s)| s.process.clone().map(|p| (id.clone(), p)))
+            .collect();
+        futures_util::future::join_all(procs.iter().map(|(id, p)| self.stop_process(id, p))).await;
         self.playit.stop().await;
     }
 
@@ -507,21 +573,18 @@ impl ServerManager {
     pub fn properties(&self, id: &str) -> Result<Vec<(String, String)>> {
         let inst = self.store.get(id)?;
         let provider = self.registry.get(&inst.game)?;
-        let Some(file) = provider.properties_file() else { return Ok(vec![]) };
-        Ok(Properties::load(&self.paths.server_dir(id).join(file))?.entries())
+        provider.read_settings(&self.paths.server_dir(id))
     }
 
     /// Applies changed properties. Port changes are validated and mirrored into the instance.
     pub fn set_properties(&self, id: &str, changes: HashMap<String, String>) -> Result<()> {
         let mut inst = self.store.get(id)?;
         let provider = self.registry.get(&inst.game)?;
-        let Some(file) = provider.properties_file() else { return Ok(()) };
-        let path = self.paths.server_dir(id).join(file);
-        let mut props = Properties::load(&path)?;
-
+        let port_key = provider.port_setting_key();
+        let mut rest: Vec<(String, String)> = vec![];
         let mut new_port = None;
         for (k, v) in &changes {
-            if k == "server-port" {
+            if k == port_key {
                 let p: u16 = v.trim().parse().map_err(|_| Error::InvalidInput("The port must be a number.".into()))?;
                 if p != inst.port {
                     self.check_port_reserved(provider.as_ref(), p, Some(id))?;
@@ -529,9 +592,9 @@ impl ServerManager {
                 }
                 continue;
             }
-            props.set(k, v.clone());
+            rest.push((k.clone(), v.clone()));
         }
-        props.save(&path)?;
+        provider.write_settings(&self.paths.server_dir(id), &rest)?;
         if let Some(p) = new_port {
             provider.apply_port(&self.paths.server_dir(id), p)?;
             inst.port = p;
@@ -711,6 +774,9 @@ impl ServerManager {
 
         match self.process(id).map(|p| (p.status(), p)) {
             Some((ServerStatus::Running, proc)) => {
+                if let Some(r) = admin.apply_live(&dir, name, &seen, &action).await {
+                    return r;
+                }
                 // Validate before touching any file.
                 let commands = admin.commands(name, &action)?;
                 if admin.live_needs_file_write(&action) {
@@ -758,9 +824,7 @@ impl ServerManager {
             return Ok(());
         }
         let info = self.registry.get(&inst.game)?.info();
-        let tunnel_type = info
-            .playit_tunnel_type
-            .ok_or_else(|| Error::Playit("this game can't be shared through playit yet".into()))?;
+        let tunnel_type = info.playit_tunnel_type;
         let port_type = match info.protocol {
             Protocol::Tcp => "tcp",
             Protocol::Udp => "udp",

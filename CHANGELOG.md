@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] - 2026-11-09
+
+### Added
+- **Palworld** servers. Hearth installs and updates them through Steam (SteamCMD), sets up the server's admin API with a random password, and controls the server through it:
+  - Shows **Online** once the server is ready, and lists online players.
+  - **Players** tab: kick, ban and unban.
+  - Console box **broadcasts** messages to everyone in the game.
+  - **Stop** saves the world before shutting down.
+  - **Settings**: server name, password, max players, difficulty, EXP and capture rates, death penalty, PvP and more, plus every raw setting.
+  - **Settings → Update** pulls the newest server from Steam after Palworld patches.
+- SteamCMD support, so more Steam games can follow.
+
 ## [0.3.2] - 2026-11-09
 
 ### Fixed

@@ -217,6 +217,20 @@ impl ServerProcess {
         }
     }
 
+    /// Replaces the online player list (games that report players through an API).
+    pub fn set_players(&self, names: Vec<String>) {
+        let changed = {
+            let mut p = self.players.lock().unwrap();
+            let new: BTreeSet<String> = names.into_iter().collect();
+            let changed = *p != new;
+            *p = new;
+            changed
+        };
+        if changed {
+            self.emit_players();
+        }
+    }
+
     /// For processes without a readiness banner.
     pub fn force_running(&self) {
         self.on_line_event(LineEvent::Ready);
@@ -265,7 +279,8 @@ impl ServerProcess {
         self.stop_requested.store(true, Ordering::SeqCst);
         self.set_status(ServerStatus::Stopping);
         self.console.push(LogStream::System, "Stopping server...");
-        if self.send_command(&self.stop_command).await.is_err() {
+        // Games without a console (stop_command "") are stopped through their API beforehand.
+        if !self.stop_command.is_empty() && self.send_command(&self.stop_command).await.is_err() {
             self.kill();
         }
         if tokio::time::timeout(timeout, self.wait()).await.is_err() {

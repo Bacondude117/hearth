@@ -180,6 +180,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
             consoleId={server.id}
             load={loader}
             canSend={active}
+            placeholder={game?.commandHint}
             onCommand={(line) => api.sendCommand(server.id, line).catch((e) => toast(errorText(e), "error"))}
           />
         )}

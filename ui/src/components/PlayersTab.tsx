@@ -88,6 +88,7 @@ export function PlayersTab({ server }: { server: Server }) {
   return (
     <div className="players">
       <div className="players-top">
+        {caps.hasWhitelist ? (
         <form className="add-player" onSubmit={addPlayer}>
           <input
             value={newName}
@@ -101,6 +102,9 @@ export function PlayersTab({ server }: { server: Server }) {
             Add to {caps.whitelistLabel.toLowerCase()}
           </button>
         </form>
+        ) : (
+          <span />
+        )}
         <p className="muted small apply-note">
           {view.running
             ? "Server is running: changes apply immediately."
@@ -108,7 +112,7 @@ export function PlayersTab({ server }: { server: Server }) {
         </p>
       </div>
 
-      {!view.whitelistEnabled && (
+      {caps.hasWhitelist && !view.whitelistEnabled && (
         <div className="banner info">
           The {caps.whitelistLabel.toLowerCase()} is <strong>off</strong>, so anyone with the address can join. Turn on{" "}
           <em>{caps.whitelistLabel === "Whitelist" ? "Whitelist only" : "Allow list only"}</em> in Settings to only let in
@@ -121,7 +125,7 @@ export function PlayersTab({ server }: { server: Server }) {
           <p>
             <strong>No players yet.</strong>
           </p>
-          <p className="muted">Players appear here after they join, or add someone by name above.</p>
+          <p className="muted">Players appear here after they join{caps.hasWhitelist ? ", or add someone by name above" : ""}.</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -129,8 +133,8 @@ export function PlayersTab({ server }: { server: Server }) {
             <thead>
               <tr>
                 <th>Player</th>
-                <th>Role</th>
-                <th>{caps.whitelistLabel}</th>
+                {caps.roles.length > 0 && <th>Role</th>}
+                {caps.hasWhitelist && <th>{caps.whitelistLabel}</th>}
                 <th className="right">Actions</th>
               </tr>
             </thead>
@@ -210,6 +214,7 @@ function PlayerRow({ p, view, disabled, onAction, onBan }: RowProps) {
           )}
         </div>
       </td>
+      {caps.roles.length > 0 && (
       <td>
         <select
           value={p.role}
@@ -228,6 +233,8 @@ function PlayerRow({ p, view, disabled, onAction, onBan }: RowProps) {
           ))}
         </select>
       </td>
+      )}
+      {caps.hasWhitelist && (
       <td>
         <input
           type="checkbox"
@@ -239,9 +246,10 @@ function PlayerRow({ p, view, disabled, onAction, onBan }: RowProps) {
           onChange={(e) => onAction({ type: "whitelist", on: e.target.checked })}
         />
       </td>
+      )}
       <td className="right">
         <div className="row-actions">
-          {p.online && view.running && (
+          {p.online && view.running && caps.gameModes.length > 0 && (
             <>
               <select
                 value=""
@@ -258,10 +266,12 @@ function PlayerRow({ p, view, disabled, onAction, onBan }: RowProps) {
                   </option>
                 ))}
               </select>
-              <button className="btn small" disabled={disabled} onClick={() => onAction({ type: "kick", reason: null }, `Kicked ${p.name}`)}>
-                Kick
-              </button>
             </>
+          )}
+          {p.online && view.running && (
+            <button className="btn small" disabled={disabled} onClick={() => onAction({ type: "kick", reason: null }, `Kicked ${p.name}`)}>
+              Kick
+            </button>
           )}
           {caps.canBan &&
             (p.banned ? (

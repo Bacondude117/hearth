@@ -146,6 +146,7 @@ impl PlayerAdmin for JavaPlayers {
             roles: vec![Role::Player, Role::Operator],
             can_ban: true,
             game_modes: GAME_MODES.to_vec(),
+            has_whitelist: true,
             whitelist_label: "Whitelist",
             role_needs_id: false,
         }
@@ -285,16 +286,11 @@ impl PlayerAdmin for JavaPlayers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     fn ctx(dir: &Path) -> GameContext {
         let paths = crate::paths::AppPaths::new(dir);
         let client = crate::http::client();
-        GameContext {
-            java: Arc::new(crate::java::JavaRuntimes::new(paths.clone(), client.clone())),
-            client,
-            paths,
-        }
+        GameContext::new(paths, client)
     }
 
     /// Files as a real 26.3 server writes them.
