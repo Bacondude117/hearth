@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-11-09
+
+### Fixed
+- **Share online** failed with "playit: validation (failed to parse body)". playit's API rejects the request format Hearth used; Hearth now uses the tunnel endpoint and format verified against the live API.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

@@ -757,13 +757,18 @@ impl ServerManager {
         if self.share_info(id).await?.is_some() {
             return Ok(());
         }
-        let tunnel_type = self
-            .registry
-            .get(&inst.game)?
-            .info()
+        let info = self.registry.get(&inst.game)?.info();
+        let tunnel_type = info
             .playit_tunnel_type
             .ok_or_else(|| Error::Playit("this game can't be shared through playit yet".into()))?;
-        let tid = self.playit.create_tunnel(tunnel_type, inst.port, &format!("Hearth: {}", inst.name)).await?;
+        let port_type = match info.protocol {
+            Protocol::Tcp => "tcp",
+            Protocol::Udp => "udp",
+        };
+        let tid = self
+            .playit
+            .create_tunnel(tunnel_type, port_type, inst.port, &format!("Hearth: {}", inst.name))
+            .await?;
         self.playit.start().await?;
         inst.playit_tunnel_id = Some(tid);
         self.store.save(&inst)?;

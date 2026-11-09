@@ -368,9 +368,9 @@ impl Playit {
             .find(|t| t.local_port == Some(local_port) && (t.protocol == protocol || t.protocol == "both")))
     }
 
-    pub async fn create_tunnel(&self, tunnel_type: &str, local_port: u16, name: &str) -> Result<String> {
+    pub async fn create_tunnel(&self, tunnel_type: &str, port_type: &str, local_port: u16, name: &str) -> Result<String> {
         let data = self.rundata(true).await?;
-        let id = self.api()?.create_tunnel(&data.agent_id, tunnel_type, local_port, name).await?;
+        let id = self.api()?.create_tunnel(&data.agent_id, tunnel_type, port_type, local_port, name).await?;
         *self.rundata.lock().unwrap() = None;
         self.changed();
         Ok(id)

@@ -115,13 +115,20 @@ impl PlayitApi {
         self.call("/v1/agents/rundata", &serde_json::json!({})).await
     }
 
-    pub async fn create_tunnel(&self, agent_id: &str, tunnel_type: &str, local_port: u16, name: &str) -> Result<String> {
+    pub async fn create_tunnel(
+        &self,
+        agent_id: &str,
+        tunnel_type: &str,
+        port_type: &str,
+        local_port: u16,
+        name: &str,
+    ) -> Result<String> {
         #[derive(Deserialize)]
         struct Id {
             id: String,
         }
-        let req = create_tunnel_request(agent_id, tunnel_type, local_port, name);
-        let id: Id = self.call("/v1/tunnels/create", &req).await?;
+        let req = create_tunnel_request(agent_id, tunnel_type, port_type, local_port, name);
+        let id: Id = self.call(CREATE_TUNNEL_PATH, &req).await?;
         Ok(id.id)
     }
 
@@ -131,23 +138,30 @@ impl PlayitApi {
     }
 }
 
-pub(crate) fn create_tunnel_request(agent_id: &str, tunnel_type: &str, local_port: u16, name: &str) -> serde_json::Value {
+/// playit rejects the newer `/v1/tunnels/create` body ("failed to parse body"); this endpoint
+/// and shape were verified against the live API.
+pub(crate) const CREATE_TUNNEL_PATH: &str = "/tunnels/create";
+
+pub(crate) fn create_tunnel_request(
+    agent_id: &str,
+    tunnel_type: &str,
+    port_type: &str,
+    local_port: u16,
+    name: &str,
+) -> serde_json::Value {
     serde_json::json!({
-        "ports": { "type": "tunnel-type", "details": tunnel_type },
+        "name": name,
+        "tunnel_type": tunnel_type,
+        "port_type": port_type,
+        "port_count": 1,
         "origin": {
             "type": "agent",
-            "data": {
-                "agent_id": agent_id,
-                "config": { "fields": [
-                    { "name": "local_ip", "value": "127.0.0.1" },
-                    { "name": "local_port", "value": local_port.to_string() },
-                ]}
-            }
+            "data": { "agent_id": agent_id, "local_ip": "127.0.0.1", "local_port": local_port }
         },
         "enabled": true,
         "alloc": null,
-        "name": name,
         "firewall_id": null,
+        "proxy_protocol": null,
     })
 }
 
@@ -244,11 +258,28 @@ mod tests {
     }
 
     #[test]
-    fn create_request_shape_matches_playit_schema() {
-        let r = create_tunnel_request("agent-1", "minecraft-bedrock", 19132, "Hearth: B");
-        assert_eq!(r["ports"]["type"], "tunnel-type");
-        assert_eq!(r["ports"]["details"], "minecraft-bedrock");
-        assert_eq!(r["origin"]["type"], "agent");
-        assert_eq!(r["origin"]["data"]["config"]["fields"][1]["value"], "19132");
+    /// The exact body that playit accepted in a real test (2026-11-09). playit rejects the
+    /// `/v1/tunnels/create` shape with "failed to parse body"; `/tunnels/create` works.
+    fn create_request_matches_what_playit_accepts() {
+        let r = create_tunnel_request("e05f684d-d21f-424d-a272-6828d10e60d7", "minecraft-java", "tcp", 25599, "Hearth: S");
+        assert_eq!(
+            r,
+            serde_json::json!({
+                "name": "Hearth: S",
+                "tunnel_type": "minecraft-java",
+                "port_type": "tcp",
+                "port_count": 1,
+                "origin": { "type": "agent", "data": {
+                    "agent_id": "e05f684d-d21f-424d-a272-6828d10e60d7",
+                    "local_ip": "127.0.0.1",
+                    "local_port": 25599
+                }},
+                "enabled": true,
+                "alloc": null,
+                "firewall_id": null,
+                "proxy_protocol": null
+            })
+        );
+        assert_eq!(CREATE_TUNNEL_PATH, "/tunnels/create");
     }
 }
