@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.1] - 2026-11-11
+
+### Fixed
+- Terraria servers stayed on **Starting** and didn't count players: the real server prints its `: ` console prompt before messages (`: Server started`), which Hearth didn't expect.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added

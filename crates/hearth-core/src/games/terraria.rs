@@ -262,11 +262,15 @@ impl GameProvider for Terraria {
 /// Chat shows as `<Name> message`, so lines starting with `<` are never joins.
 pub(crate) fn parse_terraria_line(line: &str) -> Option<LineEvent> {
     // World generation progress uses carriage returns; look at the last segment.
-    let msg = line.rsplit('\r').next().unwrap_or(line).trim();
+    let mut msg = line.rsplit('\r').next().unwrap_or(line).trim();
+    // The server prints its `: ` console prompt before output (sometimes several in a row).
+    while let Some(rest) = msg.strip_prefix(':') {
+        msg = rest.trim_start();
+    }
     if msg == "Server started" {
         return Some(LineEvent::Ready);
     }
-    if msg.starts_with('<') || msg.starts_with(':') {
+    if msg.starts_with('<') {
         return None;
     }
     let name_ok = |n: &str| !n.is_empty() && n.chars().count() <= 20;
@@ -493,6 +497,22 @@ mod tests {
         assert!(cfg.get("world").unwrap().ends_with("Hard_Mode.wld"));
         assert_eq!(cfg.get("maxplayers"), Some("16"));
         assert_eq!(cfg.get("port"), Some("7790"));
+    }
+
+    /// The real server prefixes output with its `: ` console prompt (seen on 1.4.5.8).
+    #[test]
+    fn parses_lines_after_the_console_prompt() {
+        assert_eq!(parse_terraria_line(": Server started"), Some(LineEvent::Ready));
+        assert_eq!(parse_terraria_line(": : Server started"), Some(LineEvent::Ready));
+        assert_eq!(
+            parse_terraria_line(": Bacon has joined."),
+            Some(LineEvent::PlayerJoined("Bacon".into()))
+        );
+        assert_eq!(
+            parse_terraria_line(": Bacon has left."),
+            Some(LineEvent::PlayerLeft("Bacon".into()))
+        );
+        assert_eq!(parse_terraria_line(": <Griefer> Notch has joined."), None);
     }
 
     #[test]

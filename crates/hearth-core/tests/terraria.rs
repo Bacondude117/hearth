@@ -38,10 +38,10 @@ echo "Terraria Server v1.4.5.8"
 printf 'Generating world terrain: 50%%\rGenerating world terrain: 100%%\n'
 echo "Listening on port 7790"
 echo "Type 'help' for a list of commands."
-echo "Server started"
+printf ": Server started\n"
 while IFS= read -r line; do
   case "$line" in
-    join*) echo "${line#join } has joined." ;;
+    join*) echo ": ${line#join } has joined." ;;
     "kick "*) echo "${line#kick } has left." ; echo "kicked" ;;
     "ban "*) printf '//%s\n10.0.0.9\n' "${line#ban }" >> banlist.txt ; echo "${line#ban } has left." ;;
     exit) echo "Saving world data: 100%"; echo "Backing up world file"; exit 0 ;;
