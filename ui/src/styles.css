@@ -127,6 +127,7 @@ button { font: inherit; color: inherit; }
 .game-icon.minecraft-java { background-image: url(/icons/minecraft-java.svg); }
 .game-icon.minecraft-bedrock { background-image: url(/icons/minecraft-bedrock.svg); }
 .game-icon.palworld { background-image: url(/icons/palworld.svg); }
+.game-icon.terraria { background-image: url(/icons/terraria.svg); }
 img.game-icon { background: none; }
 .icon-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .icon-text { flex: 1; min-width: 0; }

@@ -9,7 +9,7 @@ type Field =
   | { key: string; label: string; kind: "text"; hint?: string }
   | { key: string; label: string; kind: "number"; min: number; max: number; step?: number; hint?: string; port?: boolean }
   | { key: string; label: string; kind: "bool"; hint?: string; pascal?: boolean }
-  | { key: string; label: string; kind: "select"; options: string[]; hint?: string };
+  | { key: string; label: string; kind: "select"; options: string[]; labels?: Record<string, string>; hint?: string };
 
 const JAVA_FIELDS: Field[] = [
   { key: "motd", label: "Message of the day", kind: "text", hint: "Shown in the multiplayer server list." },
@@ -54,7 +54,19 @@ const PALWORLD_FIELDS: Field[] = [
   { key: "AdminPassword", label: "Admin password", kind: "text", hint: "Hearth uses this to control the server. Players can type it in chat with /AdminPassword." },
 ];
 
+const TERRARIA_FIELDS: Field[] = [
+  { key: "worldname", label: "World name", kind: "text", hint: "A new world is created on the next start if none exists with this name." },
+  { key: "autocreate", label: "World size", kind: "select", options: ["1", "2", "3"], labels: { "1": "Small", "2": "Medium", "3": "Large" }, hint: "Used when the world is created." },
+  { key: "difficulty", label: "Difficulty", kind: "select", options: ["0", "1", "2", "3"], labels: { "0": "Classic", "1": "Expert", "2": "Master", "3": "Journey" }, hint: "Used when the world is created." },
+  { key: "maxplayers", label: "Max players", kind: "number", min: 1, max: 255 },
+  { key: "password", label: "Join password", kind: "text", hint: "Leave empty so anyone with the address can join." },
+  { key: "motd", label: "Message of the day", kind: "text" },
+  { key: "seed", label: "World seed", kind: "text", hint: "Optional. Only used when the world is created." },
+  { key: "port", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
+];
+
 const FIELDS: Record<string, Field[]> = {
+  terraria: TERRARIA_FIELDS,
   "minecraft-java": JAVA_FIELDS,
   "minecraft-bedrock": BEDROCK_FIELDS,
   palworld: PALWORLD_FIELDS,
@@ -102,7 +114,9 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
   const values = useMemo(() => new Map(props ?? []), [props]);
   const val = (k: string) => edits[k] ?? values.get(k) ?? "";
   const set = (k: string, v: string) => setEdits((e) => ({ ...e, [k]: v }));
-  const fields = (FIELDS[server.game] ?? []).filter((f) => values.has(f.key) || (f.kind === "number" && f.port));
+  const fields = (FIELDS[server.game] ?? []).filter(
+    (f) => values.has(f.key) || (f.kind === "number" && f.port) || server.game === "terraria",
+  );
   const dirty = Object.keys(edits).some((k) => edits[k] !== values.get(k));
   const metaDirty = name.trim() !== server.name || (game?.configurableMemory && memory !== server.memoryMb);
   const maxMemory = Math.max(1024, Math.min(32768, Math.floor(((info.totalMemoryMb ?? 8192) - 2048) / 512) * 512));
@@ -250,7 +264,9 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
             <p className="muted">
               {server.pack
                 ? `This server came from the ${server.pack.name} modpack, so its Minecraft version is fixed. Changing it would break the mods.`
-                : server.game === "palworld"
+                : server.game === "terraria"
+                  ? "Downloads the newest Terraria server from terraria.org. Players can only join a server on the same version as their game, so update after Terraria patches. Worlds and settings are kept."
+                  : server.game === "palworld"
                   ? "Downloads the newest Palworld server through Steam. Players can only join a server on the same version as their game, so update after every Palworld patch. Worlds and settings are kept."
                   : server.game === "minecraft-bedrock"
                 ? "Bedrock players can only join a server on the same version as their game. Worlds and settings are kept."
@@ -319,7 +335,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: string; o
           {!field.options.includes(value) && <option value={value}>{value || "(default)"}</option>}
           {field.options.map((o) => (
             <option key={o} value={o}>
-              {o[0].toUpperCase() + o.slice(1)}
+              {field.labels?.[o] ?? o[0].toUpperCase() + o.slice(1)}
             </option>
           ))}
         </select>

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0] - 2026-11-11
+
+### Added
+- **Terraria** servers, using Re-Logic's official dedicated server from terraria.org (no Steam needed):
+  - Runs unattended: the world is created on first start from the size, difficulty and name in Settings.
+  - Full console (say, save, time, playing, ...); **Stop** saves the world first.
+  - Shows **Online** when the server is ready and tracks who's playing.
+  - **Players** tab: kick and ban online players, unban from the ban list.
+  - **Settings**: world name, size, difficulty, seed, max players, password, message of the day and port.
+  - **Settings → Update** downloads the newest server after Terraria patches.
+  - **Share online** uses playit's Terraria tunnel type.
+
 ## [0.6.1] - 2026-11-09
 
 ### Fixed

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82c4"/><stop offset="1" stop-color="#8cc8ef"/></linearGradient>
+  </defs>
+  <clipPath id="r"><rect width="64" height="64" rx="14"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="64" height="64" fill="url(#sky)"/>
+    <rect x="44" y="10" width="10" height="10" fill="#ffe27a"/>
+    <!-- stepped pixel hills -->
+    <path d="M0 40 h12 v-4 h10 v-4 h12 v6 h10 v-8 h20 v34 h-64 z" fill="#5fae3d"/>
+    <path d="M0 44 h12 v-4 h10 v-4 h12 v6 h10 v-8 h20 v30 h-64 z" fill="#8a5a35"/>
+    <path d="M0 54 h64 v10 h-64 z" fill="#6b4428"/>
+    <rect x="8" y="50" width="4" height="4" fill="#9aa3ad"/><rect x="40" y="48" width="4" height="4" fill="#9aa3ad"/>
+    <!-- pickaxe -->
+    <g transform="rotate(-35 30 30)">
+      <rect x="28" y="18" width="4" height="26" fill="#a0703f"/>
+      <path d="M16 18 h28 v4 h-4 v2 h-20 v-2 h-4 z" fill="#d7dde3"/>
+      <path d="M16 18 h28 v2 h-28 z" fill="#ffffff" opacity=".5"/>
+    </g>
+  </g>
+</svg>

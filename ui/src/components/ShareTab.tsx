@@ -8,6 +8,7 @@ const JOIN_HELP: Record<string, string> = {
   "minecraft-java": "In Minecraft: Multiplayer → Add Server, and paste this as the Server Address.",
   "minecraft-bedrock": "In Minecraft: Play → Servers → Add Server. Put the part before the colon in Server Address and the number after it in Port.",
   palworld: "In Palworld: Join Multiplayer Game, paste this address (including the :port) into the box at the bottom, and Connect.",
+  terraria: "In Terraria: Multiplayer → Join via IP, pick a character, and enter this address. If it shows a :port, type the part after the colon as the port.",
 };
 
 const TUNNEL_KIND: Record<string, string> = {

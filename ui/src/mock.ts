@@ -61,6 +61,19 @@ const games: GameInfo[] = [
     commandHint: "Broadcast a message to everyone in the game",
     setupNote: "Palworld servers need a lot of memory: 8 GB at minimum, 16 GB or more recommended. The first install downloads about 4 GB through Steam.",
   },
+  {
+    id: "terraria",
+    name: "Terraria",
+    description: "2D sandbox adventure. Friends join from Multiplayer → Join via IP with your address.",
+    flavors: [{ id: "vanilla", name: "Dedicated server", description: "Re-Logic's official dedicated server from terraria.org." }],
+    defaultPort: 7777,
+    protocol: "tcp",
+    configurableMemory: false,
+    eula: null,
+    playitTunnelType: "terraria",
+    commandHint: "Type a command, e.g. say hello, save, or playing",
+    setupNote: "The world is created the first time you start the server. Set its size, difficulty and name in Settings before you press Start.",
+  },
 ];
 
 const now = new Date().toISOString();
@@ -96,6 +109,13 @@ const servers: Server[] = [
   },
 ];
 
+servers.push({
+  id: "terra-1e2f", name: "Terraria Crew", game: "terraria", flavor: "vanilla", version: "latest",
+  installedBuild: "1.4.5.8", port: 7777, memoryMb: null, javaMajor: null, jvmArgs: [],
+  installState: { state: "installed" }, createdAt: now, playitTunnelId: null,
+  status: { state: "stopped" }, players: [], protocol: "tcp", gameName: "Terraria",
+  launch: null, pack: null, content: null, iconVersion: null, voice: null,
+});
 servers.push({
   id: "pals-9c0d", name: "Pal Island", game: "palworld", flavor: "steam", version: "latest",
   installedBuild: "build 20481234", port: 8211, memoryMb: null, javaMajor: null, jvmArgs: [],
@@ -188,6 +208,10 @@ for (const l of [
 ]) log("survival-1a2b", `[${t()} INFO]: ${l}`);
 log("creative-3c4d", "Installation complete. Press Start to launch the server.", "system");
 
+props.set("terra-1e2f", [
+  ["worldname", "Terraria Crew"], ["autocreate", "2"], ["difficulty", "1"], ["maxplayers", "8"], ["password", ""],
+  ["motd", "Welcome to Terraria Crew!"], ["port", "7777"], ["secure", "1"], ["upnp", "0"], ["banlist", "banlist.txt"],
+]);
 props.set("pals-9c0d", [
   ["ServerName", "Pal Island"], ["ServerDescription", "Friends only"], ["ServerPassword", ""], ["ServerPlayerMaxNum", "8"],
   ["Difficulty", "None"], ["DeathPenalty", "Item"], ["ExpRate", "1.500000"], ["PalCaptureRate", "1.000000"],
@@ -243,6 +267,8 @@ const handlers: Record<string, (a: any) => unknown> = {
   versions: ({ game, flavor }) =>
     game === "palworld"
       ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
+      : game === "terraria"
+        ? [{ id: "latest", label: "Latest (1.4.5.8)", stable: true }]
       : ["fabric", "forge", "neoforge"].includes(flavor)
       ? ["26.3", "26.2", "26.1.2", "1.21.1", "1.20.1"].map((v) => ({ id: v, label: v, stable: true }))
       : game === "minecraft-bedrock"
@@ -256,7 +282,7 @@ const handlers: Record<string, (a: any) => unknown> = {
             { id: "1.21.11", label: "1.21.11", stable: true },
           ]
         : ["26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10"].map((v) => ({ id: v, label: v, stable: true })),
-  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : 25567),
+  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : 25567),
   list_servers: () => servers,
   get_server: ({ id }) => find(id),
   create_server: ({ req }) => {
@@ -319,12 +345,12 @@ const handlers: Record<string, (a: any) => unknown> = {
     const list = (playerStore.get(id) ?? []).map((p) => ({ ...p, online: s.players.includes(p.name) }));
     list.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     return {
-      caps: s.game === "palworld"
+      caps: s.game === "palworld" || s.game === "terraria"
         ? { roles: [], canBan: true, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
         : bedrock
           ? { roles: ["visitor", "member", "operator"], canBan: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
           : { roles: ["player", "operator"], canBan: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
-      whitelistEnabled: !bedrock && s.game !== "palworld",
+      whitelistEnabled: !bedrock && s.game !== "palworld" && s.game !== "terraria",
       running: s.status.state === "running",
       players: list,
     };

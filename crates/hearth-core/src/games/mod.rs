@@ -12,6 +12,7 @@ pub mod minecraft_java;
 pub mod palworld;
 pub mod palworld_api;
 pub mod palworld_settings;
+pub mod terraria;
 
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
@@ -265,6 +266,7 @@ impl Registry {
                 Arc::new(minecraft_java::MinecraftJava),
                 Arc::new(minecraft_bedrock::MinecraftBedrock),
                 Arc::new(palworld::Palworld),
+                Arc::new(terraria::Terraria),
             ],
         }
     }

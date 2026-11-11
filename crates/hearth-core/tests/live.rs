@@ -356,3 +356,32 @@ async fn fabric_server_with_voice_chat() {
     assert!(m.get(&inst.id).unwrap().instance.voice.is_none());
     assert!(!m.list_content(&inst.id).unwrap().iter().any(|c| c.file == v.file));
 }
+
+/// Installs the real Terraria server from terraria.org (no boot: that's verified on Windows).
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn installs_terraria() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let v = m.versions("terraria", "vanilla").await.unwrap();
+    println!("{v:?}");
+    let inst = m
+        .create(CreateServer {
+            name: "Terra Live".into(),
+            game: "terraria".into(),
+            flavor: "vanilla".into(),
+            version: "latest".into(),
+            port: None,
+            memory_mb: None,
+            accept_eula: false,
+        })
+        .unwrap();
+    wait_installed(&m, &inst.id).await;
+    let s = m.get(&inst.id).unwrap().instance;
+    println!("installed {:?}", s.installed_build);
+    let dir = m.server_dir(&inst.id).unwrap();
+    assert!(dir.join("TerrariaServer.bin.x86_64").exists());
+    let props: std::collections::HashMap<String, String> = m.properties(&inst.id).unwrap().into_iter().collect();
+    assert_eq!(props["port"], "7777");
+    assert!(props["world"].ends_with("Terra_Live.wld"));
+}
