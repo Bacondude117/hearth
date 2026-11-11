@@ -80,6 +80,11 @@ pub struct ServerManager {
     installing: Mutex<HashSet<String>>,
     /// Serializes start/stop per manager so double-clicks can't launch twice.
     lifecycle: tokio::sync::Mutex<()>,
+    /// Serializes tunnel create/delete so a double-click can't open two tunnels for one server.
+    tunnels: tokio::sync::Mutex<()>,
+    /// Tunnels created moments ago, per server. playit's run data can take a little while to
+    /// list a new tunnel; until it does, sharing again must not create a second one.
+    fresh_tunnels: Mutex<HashMap<String, std::time::Instant>>,
     pub playit: Arc<Playit>,
 }
 
@@ -98,6 +103,8 @@ impl ServerManager {
             slots: Mutex::new(HashMap::new()),
             installing: Mutex::new(HashSet::new()),
             lifecycle: tokio::sync::Mutex::new(()),
+            tunnels: tokio::sync::Mutex::new(()),
+            fresh_tunnels: Mutex::new(HashMap::new()),
             playit,
         });
         mgr.recover_interrupted_installs();
@@ -947,8 +954,18 @@ impl ServerManager {
     }
 
     pub async fn share(&self, id: &str) -> Result<()> {
+        let _guard = self.tunnels.lock().await;
         let mut inst = self.store.get(id)?;
         if self.share_info(id).await?.is_some() {
+            return Ok(());
+        }
+        let just_created = self
+            .fresh_tunnels
+            .lock()
+            .unwrap()
+            .get(id)
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(120));
+        if just_created && inst.playit_tunnel_id.is_some() {
             return Ok(());
         }
         let info = self.registry.get(&inst.game)?.info();
@@ -964,6 +981,10 @@ impl ServerManager {
         self.playit.start().await?;
         inst.playit_tunnel_id = Some(tid);
         self.store.save(&inst)?;
+        self.fresh_tunnels
+            .lock()
+            .unwrap()
+            .insert(id.to_owned(), std::time::Instant::now());
         if inst.voice.is_some() {
             if let Err(e) = self.ensure_voice_tunnel(&inst).await {
                 self.console(id)
@@ -975,6 +996,7 @@ impl ServerManager {
     }
 
     pub async fn unshare(&self, id: &str) -> Result<()> {
+        let _guard = self.tunnels.lock().await;
         let mut inst = self.store.get(id)?;
         let tid = match self.share_info(id).await? {
             Some(t) => Some(t.id),
@@ -984,6 +1006,7 @@ impl ServerManager {
             self.playit.delete_tunnel(&t).await?;
         }
         self.remove_voice_tunnel(&inst).await;
+        self.fresh_tunnels.lock().unwrap().remove(id);
         inst.playit_tunnel_id = None;
         self.store.save(&inst)?;
         self.changed();
@@ -1009,6 +1032,7 @@ impl ServerManager {
         inst.voice = Some(mc_voicechat::VoiceChat { port, file, version });
         self.store.save(&inst)?;
         if self.playit.is_linked() && self.share_info(id).await.ok().flatten().is_some() {
+            let _guard = self.tunnels.lock().await;
             if let Err(e) = self.ensure_voice_tunnel(&inst).await {
                 self.console(id)
                     .push(LogStream::System, format!("Couldn't create the voice chat tunnel: {e}"));
