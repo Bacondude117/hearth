@@ -289,6 +289,7 @@ impl GameProvider for MinecraftJava {
             args: java_args(inst, server_dir),
             cwd: server_dir.to_path_buf(),
             env: vec![],
+            console_encoding: Default::default(),
         })
     }
 

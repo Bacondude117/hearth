@@ -196,6 +196,7 @@ impl GameProvider for MinecraftBedrock {
             args: vec![],
             cwd: server_dir.to_path_buf(),
             env,
+            console_encoding: Default::default(),
         })
     }
 

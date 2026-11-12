@@ -134,6 +134,7 @@ pub struct ServerProcess {
     console: Arc<Console>,
     sink: Arc<dyn EventSink>,
     stop_command: String,
+    console_encoding: crate::games::ConsoleEncoding,
 }
 
 impl ServerProcess {
@@ -182,6 +183,7 @@ impl ServerProcess {
             console,
             sink,
             stop_command: stop_command.to_owned(),
+            console_encoding: spec.console_encoding,
         });
         proc.emit_status();
 
@@ -328,7 +330,9 @@ impl ServerProcess {
         let stdin = guard
             .as_mut()
             .ok_or_else(|| Error::Conflict("The server is not running.".into()))?;
-        stdin.write_all(format!("{line}\n").as_bytes()).await?;
+        stdin
+            .write_all(&self.console_encoding.encode(&format!("{line}\n")))
+            .await?;
         stdin.flush().await?;
         Ok(())
     }

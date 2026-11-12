@@ -113,6 +113,26 @@ pub struct LaunchSpec {
     pub args: Vec<String>,
     pub cwd: PathBuf,
     pub env: Vec<(String, String)>,
+    /// How console commands are encoded on the server's stdin.
+    pub console_encoding: ConsoleEncoding,
+}
+
+/// Text encoding a server expects on its console input.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConsoleEncoding {
+    #[default]
+    Utf8,
+    /// UTF-16 little-endian: Terraria on Windows sets `Console.InputEncoding = Encoding.Unicode`.
+    Utf16Le,
+}
+
+impl ConsoleEncoding {
+    pub fn encode(self, text: &str) -> Vec<u8> {
+        match self {
+            Self::Utf8 => text.as_bytes().to_vec(),
+            Self::Utf16Le => text.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

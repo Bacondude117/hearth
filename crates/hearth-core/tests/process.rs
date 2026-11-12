@@ -18,6 +18,7 @@ fn spawn(mode: &str) -> (Arc<ServerProcess>, Arc<Console>, Arc<VecSink>) {
         args: vec![script.to_string_lossy().into(), mode.into()],
         cwd: std::env::temp_dir(),
         env: vec![],
+        console_encoding: Default::default(),
     };
     let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
     let p = ServerProcess::spawn("t-0001".into(), &spec, parser, "stop", console.clone(), sink.clone()).unwrap();
@@ -113,6 +114,7 @@ async fn spawn_failure_is_a_readable_error() {
         args: vec![],
         cwd: std::env::temp_dir(),
         env: vec![],
+        console_encoding: Default::default(),
     };
     let parser: LineParser = Arc::new(|_: &str| None);
     let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink)

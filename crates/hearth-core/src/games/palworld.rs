@@ -162,6 +162,7 @@ impl GameProvider for Palworld {
             ],
             cwd: dir.to_path_buf(),
             env: vec![],
+            console_encoding: Default::default(),
         })
     }
 

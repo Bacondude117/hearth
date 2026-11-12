@@ -12,8 +12,8 @@ use async_trait::async_trait;
 
 use super::tmodloader as tml;
 use super::{
-    ClientImport, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome, LaunchSpec, LineEvent,
-    Progress,
+    ClientImport, ConsoleEncoding, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome,
+    LaunchSpec, LineEvent, Progress,
 };
 use crate::archive::{extract_zip, extract_zip_prefix, ExtractOptions};
 use crate::content::ContentFolder;
@@ -32,6 +32,16 @@ const BANLIST: &str = "banlist.txt";
 const VERSION_FILE: &str = ".hearth-terraria-version";
 const TML_FLAVOR: &str = "tmodloader";
 const TML_RUNTIMECONFIG: &str = "tModLoader.runtimeconfig.json";
+
+/// Terraria (and tModLoader) set `Console.InputEncoding = Encoding.Unicode` on Windows, so
+/// commands must arrive as UTF-16 or the server never sees a complete line.
+fn console_encoding() -> ConsoleEncoding {
+    if cfg!(windows) {
+        ConsoleEncoding::Utf16Le
+    } else {
+        ConsoleEncoding::Utf8
+    }
+}
 
 fn is_tml(inst: &Instance) -> bool {
     inst.flavor == TML_FLAVOR
@@ -245,6 +255,7 @@ impl GameProvider for Terraria {
             args: vec!["-config".into(), dir.join(CONFIG).display().to_string()],
             cwd: dir.to_path_buf(),
             env: vec![],
+            console_encoding: console_encoding(),
         })
     }
 
@@ -390,6 +401,7 @@ fn launch_tml(ctx: &GameContext, dir: &Path) -> Result<LaunchSpec> {
         ],
         cwd: dir.to_path_buf(),
         env: vec![("DOTNET_ROOT".into(), path(&ctx.dotnet.dir(&channel)))],
+        console_encoding: console_encoding(),
     })
 }
 
@@ -635,6 +647,22 @@ mod tests {
     }
 
     /// The real server prefixes output with its `: ` console prompt (seen on 1.4.5.8).
+    #[test]
+    fn console_input_matches_what_terraria_reads() {
+        // Terraria sets Console.InputEncoding = Encoding.Unicode on Windows; a UTF-8 "kick x\n"
+        // never forms a line there.
+        let bytes = ConsoleEncoding::Utf16Le.encode("kick Bacon\n");
+        assert_eq!(&bytes[..4], &[b'k', 0, b'i', 0]);
+        assert_eq!(&bytes[bytes.len() - 2..], &[b'\n', 0]);
+        assert_eq!(ConsoleEncoding::Utf8.encode("kick Bacon\n"), b"kick Bacon\n");
+        let expected = if cfg!(windows) {
+            ConsoleEncoding::Utf16Le
+        } else {
+            ConsoleEncoding::Utf8
+        };
+        assert_eq!(console_encoding(), expected);
+    }
+
     #[test]
     fn parses_lines_after_the_console_prompt() {
         assert_eq!(parse_terraria_line(": Server started"), Some(LineEvent::Ready));

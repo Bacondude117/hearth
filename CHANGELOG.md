@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.1] - 2026-11-12
+
+### Fixed
+- Terraria and tModLoader servers ignored everything sent to their console: kick, ban, typed commands, and **Stop** (which then had to force-close the server without saving). On Windows Terraria reads its console as UTF-16, and Hearth now sends commands that way.
+
 ## [0.8.0] - 2026-11-12
 
 ### Added
