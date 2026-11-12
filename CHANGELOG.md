@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.2] - 2026-11-12
 
 ### Fixed
 - **Share online** could create a second playit tunnel for the same server if pressed again before playit listed the first one.
