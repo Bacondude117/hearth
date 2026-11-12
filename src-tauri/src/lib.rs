@@ -111,6 +111,7 @@ pub fn run() {
             commands::import_pack,
             commands::list_content,
             commands::add_content,
+            commands::import_client_content,
             commands::set_content_enabled,
             commands::delete_content,
             commands::list_players,

@@ -107,9 +107,11 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
       locked={busy}
       footer={
         <>
-          <button className="btn ghost import-btn" type="button" onClick={onImport} disabled={busy}>
-            📦 Import modpack…
-          </button>
+          {game.id === "minecraft-java" && (
+            <button className="btn ghost import-btn" type="button" onClick={onImport} disabled={busy}>
+              📦 Import Minecraft modpack…
+            </button>
+          )}
           <button className="btn ghost" type="button" onClick={onClose} disabled={busy}>
             Cancel
           </button>

@@ -829,6 +829,29 @@ impl ServerManager {
         Ok((provider, folder, self.paths.server_dir(id)))
     }
 
+    /// The server's add-on folder (for picking files of the right type).
+    pub fn content_folder(&self, id: &str) -> Result<ContentFolder> {
+        Ok(self.content_ctx(id)?.1)
+    }
+
+    /// Copies the add-ons enabled in the player's own game into the server.
+    pub async fn import_client_content(&self, id: &str) -> Result<crate::games::ClientImport> {
+        let inst = self.store.get(id)?;
+        let (provider, folder, dir) = self.content_ctx(id)?;
+        let result = tokio::task::spawn_blocking(move || provider.import_client_content(&inst, &dir))
+            .await
+            .expect("import task panicked")
+            .unwrap_or_else(|| {
+                Err(Error::InvalidInput(
+                    "This server type can't copy mods from your game.".into(),
+                ))
+            })?;
+        if !result.copied.is_empty() {
+            self.note_restart(id, &folder);
+        }
+        Ok(result)
+    }
+
     pub fn list_content(&self, id: &str) -> Result<Vec<ContentEntry>> {
         let (provider, folder, dir) = self.content_ctx(id)?;
         content::list(&dir, &folder, |p| provider.describe_content(p))

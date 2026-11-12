@@ -385,3 +385,41 @@ async fn installs_terraria() {
     assert_eq!(props["port"], "7777");
     assert!(props["world"].ends_with("Terra_Live.wld"));
 }
+
+/// Installs a tModLoader server (GitHub release + .NET runtime) without starting it.
+#[tokio::test]
+#[ignore]
+async fn installs_tmodloader() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = ServerManager::new(tmp.path(), Arc::new(NullSink));
+    let inst = m
+        .create(CreateServer {
+            name: "Modded".into(),
+            game: "terraria".into(),
+            flavor: "tmodloader".into(),
+            version: "latest".into(),
+            port: Some(7790),
+            memory_mb: None,
+            accept_eula: false,
+        })
+        .unwrap();
+    let id = inst.id.clone();
+    wait_for(
+        || {
+            let s = m.get(&id).unwrap().instance.install_state;
+            assert!(!matches!(s, InstallState::Failed { .. }), "{s:?}");
+            s == InstallState::Installed
+        },
+        600,
+        "tModLoader install",
+    )
+    .await;
+    let dir = tmp.path().join("instances").join(&id).join("server");
+    assert!(dir.join("tModLoader.dll").exists());
+    assert!(dir.join("hearth-serverconfig.txt").exists());
+    let dotnet = tmp.path().join("runtimes").join("dotnet-8.0");
+    assert!(dotnet
+        .join(if cfg!(windows) { "dotnet.exe" } else { "dotnet" })
+        .exists());
+    println!("installed {:?}", m.get(&id).unwrap().instance.installed_build);
+}

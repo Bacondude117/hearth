@@ -38,7 +38,7 @@ export interface Server {
   launch: { kind: "jar"; jar: string } | { kind: "argsFile"; argsFile: string } | null;
   pack: { name: string; version: string | null; file: string | null; loaderVersion: string | null } | null;
   /** The server's mods/plugins folder, if it has one. */
-  content: { label: string; folder: string; extension: string } | null;
+  content: { label: string; folder: string; extension: string; importLabel: string | null } | null;
   /** Changes when the custom icon changes; null = the game's default icon. */
   iconVersion: number | null;
   /** Simple Voice Chat, when installed through Hearth. */
@@ -67,6 +67,12 @@ export interface ImportPack {
   acceptEula: boolean;
   minecraft: string | null;
   loader: string | null;
+}
+
+/** Result of copying the mods enabled in the player's own game. */
+export interface ClientImport {
+  copied: string[];
+  missing: string[];
 }
 
 export interface ContentEntry {
@@ -257,6 +263,7 @@ export const api = {
   importPack: (req: ImportPack) => call<Server>("import_pack", { req }),
   listContent: (id: string) => call<ContentEntry[]>("list_content", { id }),
   addContent: (id: string) => call<string[]>("add_content", { id }),
+  importClientContent: (id: string) => call<ClientImport>("import_client_content", { id }),
   setContentEnabled: (id: string, file: string, enabled: boolean) => call<void>("set_content_enabled", { id, file, enabled }),
   deleteContent: (id: string, file: string) => call<void>("delete_content", { id, file }),
   listPlayers: (id: string) => call<PlayersView>("list_players", { id }),

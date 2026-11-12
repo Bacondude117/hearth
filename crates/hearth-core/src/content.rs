@@ -16,6 +16,8 @@ pub struct ContentFolder {
     pub folder: &'static str,
     /// File extension of add-ons, without the dot.
     pub extension: &'static str,
+    /// Button for copying the add-ons from the player's own game, if the game supports it.
+    pub import_label: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -137,6 +139,7 @@ mod tests {
     use super::*;
 
     const MODS: ContentFolder = ContentFolder {
+        import_label: None,
         label: "Mods",
         folder: "mods",
         extension: "jar",

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use hearth_core::content::ContentEntry;
 use hearth_core::events::LogLine;
+use hearth_core::games::ClientImport;
 use hearth_core::games::{GameInfo, GameVersion};
 use hearth_core::instance::Instance;
 use hearth_core::manager::{CreateServer, ImportPack, ServerSummary};
@@ -205,15 +206,25 @@ pub fn list_content(state: State<'_, AppState>, id: String) -> R<Vec<ContentEntr
 /// Opens a file picker for mod/plugin jars and copies the chosen files in.
 #[tauri::command]
 pub async fn add_content(app: AppHandle, state: State<'_, AppState>, id: String) -> R<Vec<String>> {
+    let folder = state.manager.content_folder(&id).map_err(e)?;
+    let kind = match folder.extension {
+        "jar" => "Java archives (.jar)".to_owned(),
+        ext => format!("{} (.{ext})", folder.label),
+    };
     let picked = app
         .dialog()
         .file()
-        .set_title("Add mods or plugins")
-        .add_filter("Java archives (.jar)", &["jar"])
+        .set_title(format!("Add {}", folder.label.to_lowercase()))
+        .add_filter(kind, &[folder.extension])
         .blocking_pick_files();
     let Some(files) = picked else { return Ok(vec![]) };
     let paths: Vec<std::path::PathBuf> = files.into_iter().filter_map(|f| f.into_path().ok()).collect();
     state.manager.add_content(&id, &paths).map_err(e)
+}
+
+#[tauri::command]
+pub async fn import_client_content(state: State<'_, AppState>, id: String) -> R<ClientImport> {
+    state.manager.import_client_content(&id).await.map_err(e)
 }
 
 #[tauri::command]

@@ -22,6 +22,25 @@ pub fn client() -> reqwest::Client {
         .expect("static reqwest config is valid")
 }
 
+/// Where `url` redirects to, without following it (e.g. GitHub's "latest release" links).
+pub async fn redirect_target(url: &str) -> Result<String> {
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("static reqwest config is valid");
+    let resp = client.head(url).send().await?;
+    resp.headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+        .ok_or_else(|| Error::BadResponse {
+            source_name: host_of(url),
+            detail: format!("expected a redirect, got HTTP {}", resp.status()),
+        })
+}
+
 pub async fn get_json<T: DeserializeOwned>(client: &reqwest::Client, url: &str) -> Result<T> {
     let resp = client.get(url).send().await?.error_for_status()?;
     let text = resp.text().await?;

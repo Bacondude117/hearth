@@ -13,6 +13,7 @@ pub mod palworld;
 pub mod palworld_api;
 pub mod palworld_settings;
 pub mod terraria;
+pub mod tmodloader;
 
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use serde::Serialize;
 
 use crate::content::ContentFolder;
 use crate::error::{Error, Result};
+pub use crate::games::tmodloader::ClientImport;
 use crate::instance::Instance;
 use crate::instance::JavaLaunch;
 use crate::java::JavaRuntimes;
@@ -36,6 +38,7 @@ pub struct GameContext {
     pub client: reqwest::Client,
     pub paths: AppPaths,
     pub java: Arc<JavaRuntimes>,
+    pub dotnet: Arc<crate::dotnet::DotnetRuntimes>,
     pub steam: Arc<crate::steamcmd::SteamCmd>,
 }
 
@@ -43,6 +46,7 @@ impl GameContext {
     pub fn new(paths: AppPaths, client: reqwest::Client) -> Self {
         Self {
             java: Arc::new(JavaRuntimes::new(paths.clone(), client.clone())),
+            dotnet: Arc::new(crate::dotnet::DotnetRuntimes::new(paths.clone(), client.clone())),
             steam: Arc::new(crate::steamcmd::SteamCmd::new(paths.clone(), client.clone())),
             client,
             paths,
@@ -244,6 +248,12 @@ pub trait GameProvider: Send + Sync {
 
     /// Display name and version of an add-on file.
     fn describe_content(&self, _file: &Path) -> Option<(String, Option<String>)> {
+        None
+    }
+
+    /// Copies the add-ons enabled in the player's own game on this PC into the server
+    /// (offered when the content folder has an `import_label`).
+    fn import_client_content(&self, _inst: &Instance, _server_dir: &Path) -> Option<Result<ClientImport>> {
         None
     }
 }

@@ -286,6 +286,9 @@ input[type="range"] { width: 100%; }
 .link-card.waiting { justify-content: flex-start; align-items: flex-start; }
 .address-card { background: var(--surface); border: 1.5px solid var(--accent); border-radius: var(--radius); padding: 18px; }
 .address-row { display: flex; gap: 10px; align-items: center; margin: 8px 0 10px; }
+.address-field { margin-top: 10px; }
+.address-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.address-field .address-row { margin: 4px 0 0; }
 .address { font-size: 20px; font-weight: 650; background: var(--accent-soft); padding: 6px 12px; border-radius: var(--radius-sm); flex: 1; overflow-x: auto; white-space: nowrap; }
 .lan-hint { margin-top: 4px; }
 

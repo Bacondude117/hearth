@@ -5,6 +5,7 @@
 
 pub mod archive;
 pub mod content;
+pub mod dotnet;
 pub mod error;
 pub mod events;
 pub mod games;

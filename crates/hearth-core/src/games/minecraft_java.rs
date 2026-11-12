@@ -321,11 +321,13 @@ impl GameProvider for MinecraftJava {
                 label: "Plugins",
                 folder: "plugins",
                 extension: "jar",
+                import_label: None,
             }),
             f if Loader::from_flavor(f).is_some() => Some(ContentFolder {
                 label: "Mods",
                 folder: "mods",
                 extension: "jar",
+                import_label: None,
             }),
             _ => None,
         }

@@ -3,8 +3,9 @@
 
 import type { ContentEntry, GameInfo, HearthEvent, LogLine, PackInfo, PlayitStatus, Server, ServerStatus } from "./api";
 
-const PLUGINS = { label: "Plugins", folder: "plugins", extension: "jar" };
-const MODS = { label: "Mods", folder: "mods", extension: "jar" };
+const PLUGINS = { label: "Plugins", folder: "plugins", extension: "jar", importLabel: null };
+const MODS = { label: "Mods", folder: "mods", extension: "jar", importLabel: null };
+const TML_MODS = { label: "Mods", folder: "Mods", extension: "tmod", importLabel: "Copy my enabled mods from tModLoader" };
 
 const games: GameInfo[] = [
   {
@@ -65,7 +66,10 @@ const games: GameInfo[] = [
     id: "terraria",
     name: "Terraria",
     description: "2D sandbox adventure. Friends join from Multiplayer → Join via IP with your address.",
-    flavors: [{ id: "vanilla", name: "Dedicated server", description: "Re-Logic's official dedicated server from terraria.org." }],
+    flavors: [
+      { id: "vanilla", name: "Dedicated server", description: "Re-Logic's official dedicated server from terraria.org." },
+      { id: "tmodloader", name: "tModLoader (modded)", description: "Terraria with mods. Players need tModLoader (free on Steam); missing mods download when they join." },
+    ],
     defaultPort: 7777,
     protocol: "tcp",
     configurableMemory: false,
@@ -268,7 +272,7 @@ const handlers: Record<string, (a: any) => unknown> = {
     game === "palworld"
       ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
       : game === "terraria"
-        ? [{ id: "latest", label: "Latest (1.4.5.8)", stable: true }]
+        ? [{ id: "latest", label: flavor === "tmodloader" ? "Latest (v2026.09.3.1)" : "Latest (1.4.5.8)", stable: true }]
       : ["fabric", "forge", "neoforge"].includes(flavor)
       ? ["26.3", "26.2", "26.1.2", "1.21.1", "1.20.1"].map((v) => ({ id: v, label: v, stable: true }))
       : game === "minecraft-bedrock"
@@ -294,7 +298,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
       launch: null, pack: null, iconVersion: null, voice: null,
-      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : null,
+      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : req.flavor === "tmodloader" ? TML_MODS : null,
     };
     servers.push(s);
     void install(s);
@@ -424,6 +428,17 @@ const handlers: Record<string, (a: any) => unknown> = {
     list.push({ file: "jei-1.21.1-fabric-19.21.0.jar", name: "Just Enough Items", version: "19.21.0", enabled: true, size: 1_204_331 });
     return ["jei-1.21.1-fabric-19.21.0.jar"];
   },
+  import_client_content: async ({ id }) => {
+    await sleep(600);
+    const list = contentStore.get(id) ?? [];
+    contentStore.set(id, list);
+    const copied = [
+      { file: "CalamityMod.tmod", name: "CalamityMod", version: "2.0.4.3", enabled: true, size: 98_204_331 },
+      { file: "BossChecklist.tmod", name: "BossChecklist", version: "1.6.1", enabled: true, size: 1_404_112 },
+    ];
+    for (const c of copied) if (!list.some((x) => x.file === c.file)) list.push(c);
+    return { copied: copied.map((c) => `${c.name} v${c.version}`), missing: ["MagicStorage"] };
+  },
   set_content_enabled: ({ id, file, enabled }) => {
     const m = (contentStore.get(id) ?? []).find((x) => x.file === file);
     if (m) {
@@ -441,7 +456,7 @@ const handlers: Record<string, (a: any) => unknown> = {
     const old = tunnels.findIndex((x) => x.localPort === s.port);
     if (old >= 0 && !tunnels[old].disabledReason) return;
     if (old >= 0) tunnels.splice(old, 1);
-    tunnels.push({ id: `t${tunnels.length + 1}`, name: `Hearth: ${s.name}`, address: s.protocol === "udp" ? "147.185.221.20:41234" : "quiet-otter.gl.joinmc.link", localPort: s.port, protocol: s.protocol, tunnelType: s.game, disabledReason: null });
+    tunnels.push({ id: `t${tunnels.length + 1}`, name: `Hearth: ${s.name}`, address: s.protocol === "udp" ? "147.185.221.20:41234" : s.game === "terraria" ? "impairment-temples.tun.ply.gg:28643" : "quiet-otter.gl.joinmc.link", localPort: s.port, protocol: s.protocol, tunnelType: s.game, disabledReason: null });
     emit({ type: "playitChanged" });
   },
   unshare_server: ({ id }) => {

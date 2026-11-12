@@ -5,7 +5,7 @@ import { Modal } from "./Modal";
 import { useToast } from "./Toasts";
 import { VoiceChatCard } from "./VoiceChatCard";
 
-/** Mods (Fabric/Forge/NeoForge) or Plugins (Paper): add, enable/disable, delete jars. */
+/** Mods (Fabric/Forge/NeoForge/tModLoader) or Plugins (Paper): add, enable/disable, delete files. */
 export function ContentTab({ server, playit }: { server: Server; playit: PlayitStatus | null }) {
   const toast = useToast();
   const folder = server.content!;
@@ -53,6 +53,27 @@ export function ContentTab({ server, playit }: { server: Server; playit: PlayitS
     }
   };
 
+  const importFromGame = async () => {
+    setBusy(true);
+    try {
+      const r = await api.importClientContent(server.id);
+      if (r.copied.length) {
+        toast(`Copied ${r.copied.length} ${noun}${r.copied.length === 1 ? "" : "s"} from your game`, "success");
+        setChanged(true);
+      } else if (!r.missing.length) {
+        toast(`No ${noun}s are enabled in your game.`, "info");
+      }
+      if (r.missing.length) {
+        toast(`Couldn't find a copy for this server version: ${r.missing.join(", ")}`, "error");
+      }
+    } catch (e) {
+      toast(errorText(e), "error");
+    } finally {
+      setBusy(false);
+      load();
+    }
+  };
+
   if (server.installState.state !== "installed") {
     return <p className="muted pad">{folder.label} can be managed once the server is installed.</p>;
   }
@@ -70,6 +91,11 @@ export function ContentTab({ server, playit }: { server: Server; playit: PlayitS
           <button className="btn primary" onClick={add} disabled={busy}>
             ＋ Add {noun}s…
           </button>
+          {folder.importLabel && (
+            <button className="btn ghost" onClick={importFromGame} disabled={busy}>
+              {folder.importLabel}
+            </button>
+          )}
           {items && items.length > 6 && (
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={`Filter ${items.length} ${noun}s`} aria-label={`Filter ${noun}s`} />
           )}
@@ -92,10 +118,17 @@ export function ContentTab({ server, playit }: { server: Server; playit: PlayitS
           <p>
             <strong>No {noun}s yet.</strong>
           </p>
-          <p className="muted">
-            Add .jar files built for this server's {server.flavor === "paper" ? "Paper" : "loader"} and Minecraft version {server.version}.
-            {noun === "mod" && " Only server-side or both-sides mods do anything here; client-only mods (shaders, minimaps) belong on players' PCs."}
-          </p>
+          {folder.extension === "tmod" ? (
+            <p className="muted">
+              Enable mods in tModLoader on this PC, then use <strong>{folder.importLabel}</strong>, or add .tmod files directly.
+              Players who join without them get the mods from the server automatically.
+            </p>
+          ) : (
+            <p className="muted">
+              Add .jar files built for this server's {server.flavor === "paper" ? "Paper" : "loader"} and Minecraft version {server.version}.
+              {noun === "mod" && " Only server-side or both-sides mods do anything here; client-only mods (shaders, minimaps) belong on players' PCs."}
+            </p>
+          )}
         </div>
       ) : (
         <div className="table-wrap">

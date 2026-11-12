@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0] - 2026-11-12
+
+### Added
+- **Modded Terraria** with tModLoader: pick **tModLoader (modded)** when creating a Terraria server.
+  - Hearth downloads tModLoader and the .NET runtime it needs (checksum-verified, shared between servers).
+  - **Mods** tab: **Copy my enabled mods from tModLoader** copies the mods you have enabled in your own game (Steam Workshop or local), picking the build that matches the server. You can also add `.tmod` files, and turn mods on or off.
+  - Players who join without the server's mods get them from the server automatically.
+
+### Changed
+- **Share online** shows the address and the port in separate boxes, each with its own Copy button, for games that ask for them separately (Terraria, Minecraft Bedrock).
+- **Import Minecraft modpack** only appears when Minecraft: Java Edition is selected.
+
 ## [0.7.2] - 2026-11-12
 
 ### Fixed

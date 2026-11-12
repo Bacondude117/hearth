@@ -6,10 +6,23 @@ import { useToast } from "./Toasts";
 
 const JOIN_HELP: Record<string, string> = {
   "minecraft-java": "In Minecraft: Multiplayer → Add Server, and paste this as the Server Address.",
-  "minecraft-bedrock": "In Minecraft: Play → Servers → Add Server. Put the part before the colon in Server Address and the number after it in Port.",
+  "minecraft-bedrock": "In Minecraft: Play → Servers → Add Server, then fill in both boxes below.",
   palworld: "In Palworld: Join Multiplayer Game, paste this address (including the :port) into the box at the bottom, and Connect.",
-  terraria: "In Terraria: Multiplayer → Join via IP, pick a character, and enter this address. If it shows a :port, type the part after the colon as the port.",
+  terraria: "In Terraria: Multiplayer → Join via IP, pick a character, then fill in both boxes below.",
 };
+
+/** Games whose join screen asks for the address and the port in separate boxes. */
+const SPLIT_FIELDS: Record<string, [host: string, port: string]> = {
+  "minecraft-bedrock": ["Server Address", "Port"],
+  terraria: ["Enter Server IP Address", "Enter Server Port"],
+};
+
+/** `host:port` → parts. An address without a port uses the game's default. */
+function splitAddress(address: string, fallbackPort: number): [string, string] {
+  const i = address.lastIndexOf(":");
+  if (i > 0 && /^\d+$/.test(address.slice(i + 1))) return [address.slice(0, i), address.slice(i + 1)];
+  return [address, String(fallbackPort)];
+}
 
 const TUNNEL_KIND: Record<string, string> = {
   "minecraft-java": "Minecraft Java",
@@ -63,15 +76,36 @@ export function ShareTab({ server, game, playit, onOpenPlayit }: Props) {
       {tunnel ? (
         <div className="address-card">
           <span className="stat-label">Friends join with</span>
-          <div className="address-row">
-            <code className="address">{tunnel.address}</code>
-            <button className="btn primary" onClick={async () => (await copy(tunnel.address)) && toast("Copied!", "success")}>
-              Copy
-            </button>
-          </div>
           <p className="muted">
-            {JOIN_HELP[server.game] ?? "Give this address to your friends."}
+            {server.flavor === "tmodloader"
+              ? "In tModLoader: Multiplayer → Join via IP, pick a character, then fill in both boxes below. Missing mods download automatically."
+              : JOIN_HELP[server.game] ?? "Give this address to your friends."}
           </p>
+          {SPLIT_FIELDS[server.game] ? (
+            splitAddress(tunnel.address, game?.defaultPort ?? server.port).map((value, i) => (
+              <div className="address-field" key={i}>
+                <span className="address-label">{SPLIT_FIELDS[server.game][i]}</span>
+                <div className="address-row">
+                  <code className="address">{value}</code>
+                  <button className="btn primary" onClick={async () => (await copy(value)) && toast("Copied!", "success")}>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="address-row">
+              <code className="address">{tunnel.address}</code>
+              <button className="btn primary" onClick={async () => (await copy(tunnel.address)) && toast("Copied!", "success")}>
+                Copy
+              </button>
+            </div>
+          )}
+          {SPLIT_FIELDS[server.game] && splitAddress(tunnel.address, game?.defaultPort ?? server.port)[1] !== String(server.port) && (
+            <p className="muted small">
+              Use this port, not {server.port}: {server.port} is only for players on this PC or your home network.
+            </p>
+          )}
           {tunnel.disabledReason && (
             <div className="form-error">
               <p>

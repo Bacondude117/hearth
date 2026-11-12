@@ -1,4 +1,6 @@
-//! Terraria (vanilla) dedicated server, downloaded from terraria.org.
+//! Terraria dedicated servers: Re-Logic's official server from terraria.org (`vanilla`), or
+//! tModLoader for mods (`tmodloader`, see [`super::tmodloader`]). Both read the same config
+//! file and console commands.
 //!
 //! Hearth starts it with `-config hearth-serverconfig.txt` so it runs unattended: the world is
 //! auto-created on first start from the size/difficulty/name in Settings. The server reads
@@ -8,10 +10,13 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 
+use super::tmodloader as tml;
 use super::{
-    FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome, LaunchSpec, LineEvent, Progress,
+    ClientImport, FlavorInfo, GameContext, GameInfo, GameProvider, GameVersion, InstallOutcome, LaunchSpec, LineEvent,
+    Progress,
 };
-use crate::archive::extract_zip_prefix;
+use crate::archive::{extract_zip, extract_zip_prefix, ExtractOptions};
+use crate::content::ContentFolder;
 use crate::error::{Error, IoContext, Result};
 use crate::http::{self, Checksum};
 use crate::instance::Instance;
@@ -25,6 +30,12 @@ const DOWNLOAD_BASE: &str = "https://terraria.org/api/download/pc-dedicated-serv
 pub const CONFIG: &str = "hearth-serverconfig.txt";
 const BANLIST: &str = "banlist.txt";
 const VERSION_FILE: &str = ".hearth-terraria-version";
+const TML_FLAVOR: &str = "tmodloader";
+const TML_RUNTIMECONFIG: &str = "tModLoader.runtimeconfig.json";
+
+fn is_tml(inst: &Instance) -> bool {
+    inst.flavor == TML_FLAVOR
+}
 
 pub struct Terraria;
 
@@ -113,11 +124,18 @@ impl GameProvider for Terraria {
             id: "terraria",
             name: "Terraria",
             description: "2D sandbox adventure. Friends join from Multiplayer → Join via IP with your address.",
-            flavors: vec![FlavorInfo {
-                id: "vanilla",
-                name: "Dedicated server",
-                description: "Re-Logic's official dedicated server from terraria.org.",
-            }],
+            flavors: vec![
+                FlavorInfo {
+                    id: "vanilla",
+                    name: "Dedicated server",
+                    description: "Re-Logic's official dedicated server from terraria.org.",
+                },
+                FlavorInfo {
+                    id: TML_FLAVOR,
+                    name: "tModLoader (modded)",
+                    description: "Terraria with mods. Players need tModLoader (free on Steam); missing mods download when they join.",
+                },
+            ],
             default_port: 7777,
             protocol: Protocol::Tcp,
             configurable_memory: false,
@@ -130,7 +148,15 @@ impl GameProvider for Terraria {
         }
     }
 
-    async fn versions(&self, ctx: &GameContext, _flavor: &str) -> Result<Vec<GameVersion>> {
+    async fn versions(&self, ctx: &GameContext, flavor: &str) -> Result<Vec<GameVersion>> {
+        if flavor == TML_FLAVOR {
+            let (tag, _) = tml::latest(&ctx.client).await?;
+            return Ok(vec![GameVersion {
+                id: "latest".into(),
+                label: format!("Latest ({tag})"),
+                stable: true,
+            }]);
+        }
         let names: Vec<String> = http::get_json(&ctx.client, VERSIONS_API).await?;
         let build = names.iter().find_map(|n| build_from_zip_name(n)).unwrap_or_default();
         Ok(vec![GameVersion {
@@ -152,6 +178,9 @@ impl GameProvider for Terraria {
         fresh: bool,
         progress: Progress<'_>,
     ) -> Result<InstallOutcome> {
+        if is_tml(inst) {
+            return install_tml(ctx, inst, dir, fresh, progress).await;
+        }
         progress("Looking up the latest Terraria server", None);
         let names: Vec<String> = http::get_json(&ctx.client, VERSIONS_API).await?;
         let (zip_name, build) = names
@@ -201,7 +230,10 @@ impl GameProvider for Terraria {
         })
     }
 
-    fn launch(&self, _ctx: &GameContext, _inst: &Instance, dir: &Path) -> Result<LaunchSpec> {
+    fn launch(&self, ctx: &GameContext, inst: &Instance, dir: &Path) -> Result<LaunchSpec> {
+        if is_tml(inst) {
+            return launch_tml(ctx, dir);
+        }
         let exe = executable(dir);
         if !exe.exists() {
             return Err(Error::InvalidInput(
@@ -256,6 +288,109 @@ impl GameProvider for Terraria {
     fn players(&self) -> Option<&dyn PlayerAdmin> {
         Some(&TerrariaPlayers)
     }
+
+    fn content_folder(&self, inst: &Instance) -> Option<ContentFolder> {
+        is_tml(inst).then_some(ContentFolder {
+            label: "Mods",
+            folder: tml::MODS,
+            extension: "tmod",
+            import_label: Some("Copy my enabled mods from tModLoader"),
+        })
+    }
+
+    fn describe_content(&self, file: &Path) -> Option<(String, Option<String>)> {
+        let h = tml::read_header(file)?;
+        Some((h.name, Some(h.version)))
+    }
+
+    fn import_client_content(&self, inst: &Instance, dir: &Path) -> Option<Result<ClientImport>> {
+        if !is_tml(inst) {
+            return None;
+        }
+        let line = std::fs::read_to_string(dir.join(VERSION_FILE))
+            .ok()
+            .and_then(|t| tml::release_line(t.trim()));
+        Some(tml::copy_client_mods(&tml::client_locations(), dir, line))
+    }
+}
+
+async fn install_tml(
+    ctx: &GameContext,
+    inst: &Instance,
+    dir: &Path,
+    fresh: bool,
+    progress: Progress<'_>,
+) -> Result<InstallOutcome> {
+    progress("Looking up the latest tModLoader", None);
+    let (tag, checksum) = tml::latest(&ctx.client).await?;
+    let zip = ctx.paths.cache().join(format!("tModLoader-{tag}.zip"));
+    http::download(&ctx.client, &tml::download_url(&tag), &zip, &checksum, |f| {
+        progress("Downloading tModLoader", f)
+    })
+    .await?;
+
+    progress("Unpacking", None);
+    let (zip2, dir2) = (zip.clone(), dir.to_path_buf());
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        // An update replaces the engine's libraries; mods, worlds and settings stay.
+        let libs = dir2.join("Libraries");
+        if !fresh && libs.exists() {
+            std::fs::remove_dir_all(&libs).at(&libs)?;
+        }
+        extract_zip(&zip2, &dir2, &ExtractOptions::default())
+    })
+    .await
+    .expect("extract task panicked")?;
+    let _ = tokio::fs::remove_file(&zip).await;
+    if !dir.join("tModLoader.dll").exists() {
+        return Err(Error::BadResponse {
+            source_name: "GitHub".into(),
+            detail: "the tModLoader download had no tModLoader.dll".into(),
+        });
+    }
+
+    let channel = crate::dotnet::required_channel(&dir.join(TML_RUNTIMECONFIG))?;
+    ctx.dotnet.ensure(&channel, |m, f| progress(m, f)).await?;
+
+    tokio::fs::write(dir.join(VERSION_FILE), &tag).await.at(dir)?;
+    std::fs::create_dir_all(dir.join(tml::MODS)).at(dir.join(tml::MODS))?;
+    prepare_config(dir, inst, fresh)?;
+    Ok(InstallOutcome {
+        installed_build: Some(tag.trim_start_matches('v').to_owned()),
+        java_major: None,
+        jvm_args: None,
+        launch: None,
+    })
+}
+
+/// `dotnet tModLoader.dll -server`, with saves (Mods, worlds) kept in the server folder.
+fn launch_tml(ctx: &GameContext, dir: &Path) -> Result<LaunchSpec> {
+    let missing =
+        || Error::InvalidInput("The tModLoader files are missing. Try reinstalling (Settings → Update).".into());
+    if !dir.join("tModLoader.dll").exists() {
+        return Err(missing());
+    }
+    let channel = crate::dotnet::required_channel(&dir.join(TML_RUNTIMECONFIG))?;
+    let dotnet = ctx.dotnet.installed(&channel).ok_or_else(missing)?;
+    tml::write_enabled(dir)?;
+    let workshop = dir.join("steamapps").join("workshop");
+    std::fs::create_dir_all(&workshop).at(&workshop)?;
+    let path = |p: &Path| p.display().to_string();
+    Ok(LaunchSpec {
+        program: dotnet,
+        args: vec![
+            "tModLoader.dll".into(),
+            "-server".into(),
+            "-config".into(),
+            path(&dir.join(CONFIG)),
+            "-tmlsavedirectory".into(),
+            path(dir),
+            "-steamworkshopfolder".into(),
+            path(&workshop),
+        ],
+        cwd: dir.to_path_buf(),
+        env: vec![("DOTNET_ROOT".into(), path(&ctx.dotnet.dir(&channel)))],
+    })
 }
 
 /// Terraria's console has no timestamps: `Server started`, `Bacon has joined.`, `Bacon has left.`
