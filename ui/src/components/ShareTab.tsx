@@ -72,7 +72,16 @@ export function ShareTab({ server, game, playit, onOpenPlayit }: Props) {
           <p className="muted">
             {JOIN_HELP[server.game] ?? "Give this address to your friends."}
           </p>
-          {tunnel.disabledReason && <p className="form-error">playit reports: {tunnel.disabledReason}</p>}
+          {tunnel.disabledReason && (
+            <div className="form-error">
+              <p>
+                playit has this tunnel turned off ({tunnel.disabledReason}), so nobody can join through it.
+              </p>
+              <button className="btn primary small" disabled={busy} onClick={share}>
+                {busy ? "Replacing…" : "Replace tunnel"}
+              </button>
+            </div>
+          )}
           {server.voice && (
             <p className="muted small">
               🎙 Voice chat is shared too

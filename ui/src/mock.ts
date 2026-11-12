@@ -149,7 +149,7 @@ const props = new Map<string, [string, string][]>();
 let linked = true;
 let agent: ServerStatus = { state: "running" };
 const tunnels = [
-  { id: "t1", name: "Hearth: Survival", address: "ember-fox.gl.joinmc.link", localPort: 25565, protocol: "tcp", tunnelType: "minecraft-java", disabledReason: null },
+  { id: "t1", name: "Hearth: Survival", address: "ember-fox.gl.joinmc.link", localPort: 25565, protocol: "tcp", tunnelType: "minecraft-java", disabledReason: null as string | null },
 ];
 
 type MockPlayer = { name: string; id: string | null; role: string; whitelisted: boolean; banned: boolean; banReason: string | null };
@@ -438,6 +438,9 @@ const handlers: Record<string, (a: any) => unknown> = {
   share_server: async ({ id }) => {
     await sleep(700);
     const s = find(id);
+    const old = tunnels.findIndex((x) => x.localPort === s.port);
+    if (old >= 0 && !tunnels[old].disabledReason) return;
+    if (old >= 0) tunnels.splice(old, 1);
     tunnels.push({ id: `t${tunnels.length + 1}`, name: `Hearth: ${s.name}`, address: s.protocol === "udp" ? "147.185.221.20:41234" : "quiet-otter.gl.joinmc.link", localPort: s.port, protocol: s.protocol, tunnelType: s.game, disabledReason: null });
     emit({ type: "playitChanged" });
   },

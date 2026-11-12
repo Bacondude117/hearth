@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Share online** could create a second playit tunnel for the same server if pressed again before playit listed the first one.
+- A tunnel switched off on playit.gg ("disabled by user") left friends stuck on **Connecting**. The Share tab now says so, and **Replace tunnel** swaps it for a working one.
 
 ## [0.7.1] - 2026-11-11
 

@@ -956,8 +956,15 @@ impl ServerManager {
     pub async fn share(&self, id: &str) -> Result<()> {
         let _guard = self.tunnels.lock().await;
         let mut inst = self.store.get(id)?;
-        if self.share_info(id).await?.is_some() {
-            return Ok(());
+        match self.share_info(id).await? {
+            // A disabled tunnel forwards nothing; replace it so the address works again.
+            Some(t) if t.disabled_reason.is_some() => {
+                self.playit.delete_tunnel(&t.id).await?;
+                self.fresh_tunnels.lock().unwrap().remove(id);
+                inst.playit_tunnel_id = None;
+            }
+            Some(_) => return Ok(()),
+            None => {}
         }
         let just_created = self
             .fresh_tunnels
