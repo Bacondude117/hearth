@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0] - 2026-11-12
+
+### Added
+- **Factorio** servers. On Windows, Factorio's server is part of the game, so Hearth runs the copy installed on this PC (Steam or factorio.com) with its own map, saves, mods and settings; your own game is untouched.
+  - The map is created when the server is set up; Settings covers name, password, max players, whitelist, auto-pause, autosaves and more.
+  - **Players** tab: make players admins, kick and ban (with a reason they see), whitelist, unban.
+  - **Mods** tab: **Copy my enabled mods from Factorio** copies the mods and expansion settings (Space Age, Quality) from your game; or add mod `.zip` files.
+  - Shared online through a playit UDP tunnel; friends join from Multiplayer → Connect to address.
+
+### Changed
+- The ban dialog only asks for a reason in games that show it to the banned player (Minecraft Java, Factorio).
+
 ## [0.9.0] - 2026-11-12
 
 ### Added

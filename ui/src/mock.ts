@@ -5,6 +5,7 @@ import type { ContentEntry, GameInfo, HearthEvent, LogLine, PackInfo, PlayitStat
 
 const PLUGINS = { label: "Plugins", folder: "plugins", extension: "jar", importLabel: null };
 const MODS = { label: "Mods", folder: "mods", extension: "jar", importLabel: null };
+const FACTORIO_MODS = { label: "Mods", folder: "mods", extension: "zip", importLabel: "Copy my enabled mods from Factorio" };
 const TML_MODS = { label: "Mods", folder: "Mods", extension: "tmod", importLabel: "Copy my enabled mods from tModLoader" };
 
 const games: GameInfo[] = [
@@ -81,6 +82,20 @@ const games: GameInfo[] = [
     playitTunnelType: "terraria",
     commandHint: "Type a command, e.g. say hello, save, or playing",
     setupNote: "The world is created the first time you start the server. Set its size, difficulty and name in Settings before you press Start.",
+  },
+  {
+    id: "factorio",
+    name: "Factorio",
+    description: "Build and automate factories together. Friends join from Multiplayer → Connect to address.",
+    flavors: [{ id: "installed", name: "Your Factorio", description: "Runs the server with the Factorio installed on this PC (Steam or factorio.com)." }],
+    defaultPort: 34197,
+    protocol: "udp",
+    configurableMemory: false,
+    memoryLimit: true,
+    eula: null,
+    playitTunnelType: null,
+    commandHint: "Type a command or chat, e.g. /players or hello",
+    setupNote: "Factorio's server is part of the game on Windows, so Hearth uses the copy installed on this PC, with its own map, saves and mods. Players need the same Factorio version (and expansion, if it's turned on).",
   },
 ];
 
@@ -275,6 +290,8 @@ const handlers: Record<string, (a: any) => unknown> = {
   versions: ({ game, flavor }) =>
     game === "palworld"
       ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
+      : game === "factorio"
+        ? [{ id: "installed", label: "Installed (2.0.72)", stable: true }]
       : game === "terraria"
         ? [{ id: "latest", label: flavor === "tmodloader" ? "Latest (v2026.09.3.1)" : "Latest (1.4.5.8)", stable: true }]
       : ["fabric", "forge", "neoforge"].includes(flavor)
@@ -290,7 +307,7 @@ const handlers: Record<string, (a: any) => unknown> = {
             { id: "1.21.11", label: "1.21.11", stable: true },
           ]
         : ["26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10"].map((v) => ({ id: v, label: v, stable: true })),
-  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : 25567),
+  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : game === "factorio" ? 34197 : 25567),
   list_servers: () => servers,
   get_server: ({ id }) => find(id),
   create_server: ({ req }) => {
@@ -302,7 +319,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
       launch: null, pack: null, iconVersion: null, voice: null,
-      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : req.flavor === "tmodloader" ? TML_MODS : null,
+      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : req.flavor === "tmodloader" ? TML_MODS : req.game === "factorio" ? FACTORIO_MODS : null,
     };
     servers.push(s);
     void install(s);
@@ -354,10 +371,12 @@ const handlers: Record<string, (a: any) => unknown> = {
     list.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     return {
       caps: s.game === "palworld" || s.game === "terraria"
-        ? { roles: [], canBan: true, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
+        ? { roles: [], canBan: true, banReason: false, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
         : bedrock
-          ? { roles: ["visitor", "member", "operator"], canBan: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
-          : { roles: ["player", "operator"], canBan: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
+          ? { roles: ["visitor", "member", "operator"], canBan: false, banReason: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
+          : s.game === "factorio"
+            ? { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: [], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false }
+            : { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
       whitelistEnabled: !bedrock && s.game !== "palworld" && s.game !== "terraria",
       running: s.status.state === "running",
       players: list,

@@ -299,34 +299,14 @@ pub fn copy_client_mods(
     Ok(out)
 }
 
-/// `"path"  "D:\\SteamLibrary"` lines from Steam's `libraryfolders.vdf`.
-pub fn library_paths(vdf: &str) -> Vec<PathBuf> {
-    vdf.lines()
-        .filter_map(|l| {
-            let l = l.trim();
-            let rest = l.strip_prefix("\"path\"")?.trim();
-            let v = rest.strip_prefix('"')?.strip_suffix('"')?;
-            Some(PathBuf::from(v.replace("\\\\", "\\")))
-        })
-        .collect()
-}
-
 /// The player's tModLoader folders on this PC.
 pub fn client_locations() -> ClientLocations {
     let mods_dir = platform::saves_dir().map(|d| d.join("Terraria").join("tModLoader").join(MODS));
     let mut workshop_dirs = vec![];
-    if let Some(steam) = platform::steam_dir() {
-        let mut libraries = vec![steam.clone()];
-        let vdf = steam.join("steamapps").join("libraryfolders.vdf");
-        if let Ok(text) = std::fs::read_to_string(vdf) {
-            libraries.extend(library_paths(&text));
-        }
-        libraries.dedup();
-        for lib in libraries {
-            let dir = lib.join("steamapps").join("workshop").join("content").join(STEAM_APP);
-            if dir.is_dir() && !workshop_dirs.contains(&dir) {
-                workshop_dirs.push(dir);
-            }
+    for lib in crate::steamlib::libraries() {
+        let dir = lib.join("steamapps").join("workshop").join("content").join(STEAM_APP);
+        if dir.is_dir() && !workshop_dirs.contains(&dir) {
+            workshop_dirs.push(dir);
         }
     }
     ClientLocations {
@@ -337,59 +317,11 @@ pub fn client_locations() -> ClientLocations {
 
 #[cfg(windows)]
 mod platform {
-    use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::path::PathBuf;
-
-    use windows_sys::Win32::System::Com::CoTaskMemFree;
-    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
-    use windows_sys::Win32::UI::Shell::{FOLDERID_Documents, SHGetKnownFolderPath};
-
-    fn wide(s: &str) -> Vec<u16> {
-        std::ffi::OsStr::new(s).encode_wide().chain(Some(0)).collect()
-    }
 
     /// `Documents/My Games` (Documents may be redirected, e.g. to OneDrive).
     pub fn saves_dir() -> Option<PathBuf> {
-        let mut out: *mut u16 = std::ptr::null_mut();
-        // SAFETY: SHGetKnownFolderPath allocates `out` on success; it's freed below.
-        let hr = unsafe { SHGetKnownFolderPath(&FOLDERID_Documents, 0, std::ptr::null_mut(), &mut out) };
-        if hr != 0 || out.is_null() {
-            return None;
-        }
-        // SAFETY: `out` is a valid NUL-terminated wide string until freed.
-        let path = unsafe {
-            let len = (0..).take_while(|&i| *out.add(i) != 0).count();
-            let p = std::ffi::OsString::from_wide(std::slice::from_raw_parts(out, len));
-            CoTaskMemFree(out as *const _);
-            p
-        };
-        Some(PathBuf::from(path).join("My Games"))
-    }
-
-    pub fn steam_dir() -> Option<PathBuf> {
-        let key = wide("Software\\Valve\\Steam");
-        let name = wide("SteamPath");
-        let mut buf = vec![0u16; 1024];
-        let mut size = (buf.len() * 2) as u32;
-        // SAFETY: buffers are valid for the sizes given.
-        let rc = unsafe {
-            RegGetValueW(
-                HKEY_CURRENT_USER,
-                key.as_ptr(),
-                name.as_ptr(),
-                RRF_RT_REG_SZ,
-                std::ptr::null_mut(),
-                buf.as_mut_ptr() as *mut _,
-                &mut size,
-            )
-        };
-        if rc != 0 {
-            let fallback = PathBuf::from(r"C:\Program Files (x86)\Steam");
-            return fallback.is_dir().then_some(fallback);
-        }
-        let len = buf.iter().position(|&c| c == 0).unwrap_or(0);
-        let s = String::from_utf16_lossy(&buf[..len]).replace('/', "\\");
-        (!s.is_empty()).then(|| PathBuf::from(s))
+        crate::steamlib::documents_dir().map(|d| d.join("My Games"))
     }
 }
 
@@ -397,17 +329,9 @@ mod platform {
 mod platform {
     use std::path::PathBuf;
 
-    fn home() -> Option<PathBuf> {
-        std::env::var_os("HOME").map(PathBuf::from)
-    }
-
     /// tModLoader on Linux keeps saves under `~/.local/share/Terraria`.
     pub fn saves_dir() -> Option<PathBuf> {
-        home().map(|h| h.join(".local").join("share"))
-    }
-
-    pub fn steam_dir() -> Option<PathBuf> {
-        home().map(|h| h.join(".steam").join("steam")).filter(|p| p.is_dir())
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share"))
     }
 }
 
@@ -537,17 +461,5 @@ pub(crate) mod tests {
         let none = ClientLocations::default();
         let err = copy_client_mods(&none, &server, None).unwrap_err().to_string();
         assert!(err.contains("Couldn't find tModLoader"), "{err}");
-    }
-
-    #[test]
-    fn reads_steam_library_folders() {
-        let vdf = "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Program Files (x86)\\\\Steam\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"D:\\\\SteamLibrary\"\n\t}\n}\n";
-        assert_eq!(
-            library_paths(vdf),
-            vec![
-                PathBuf::from(r"C:\Program Files (x86)\Steam"),
-                PathBuf::from(r"D:\SteamLibrary")
-            ]
-        );
     }
 }

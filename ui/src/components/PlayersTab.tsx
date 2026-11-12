@@ -180,10 +180,12 @@ export function PlayersTab({ server }: { server: Server }) {
         }
       >
         <p>They'll be disconnected if online and can't rejoin until unbanned.</p>
+        {view?.caps.banReason && (
         <label className="field">
           <span>Reason (optional, shown to the player)</span>
           <input value={banReason} onChange={(e) => setBanReason(e.target.value)} maxLength={200} />
         </label>
+        )}
       </Modal>
     </div>
   );

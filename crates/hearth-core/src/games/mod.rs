@@ -2,6 +2,7 @@
 //! one provider and registering it in [`Registry::builtin`].
 
 pub mod bedrock_players;
+pub mod factorio;
 pub mod java_players;
 pub mod mc_content;
 pub mod mc_loaders;
@@ -302,6 +303,7 @@ impl Registry {
                 Arc::new(minecraft_bedrock::MinecraftBedrock),
                 Arc::new(palworld::Palworld),
                 Arc::new(terraria::Terraria),
+                Arc::new(factorio::Factorio),
             ],
         }
     }

@@ -150,6 +150,7 @@ impl PlayerAdmin for JavaPlayers {
         PlayerCaps {
             roles: vec![Role::Player, Role::Operator],
             can_ban: true,
+            ban_reason: true,
             game_modes: GAME_MODES.to_vec(),
             has_whitelist: true,
             whitelist_label: "Whitelist",

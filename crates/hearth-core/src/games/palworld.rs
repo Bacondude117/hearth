@@ -299,6 +299,7 @@ impl PlayerAdmin for PalworldPlayers {
         PlayerCaps {
             roles: vec![],
             can_ban: true,
+            ban_reason: false,
             game_modes: vec![],
             has_whitelist: false,
             whitelist_label: "",

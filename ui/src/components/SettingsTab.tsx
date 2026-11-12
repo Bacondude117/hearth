@@ -55,6 +55,21 @@ const PALWORLD_FIELDS: Field[] = [
   { key: "AdminPassword", label: "Admin password", kind: "text", hint: "Hearth uses this to control the server. Players can type it in chat with /AdminPassword." },
 ];
 
+const FACTORIO_FIELDS: Field[] = [
+  { key: "name", label: "Server name", kind: "text" },
+  { key: "description", label: "Description", kind: "text" },
+  { key: "game_password", label: "Join password", kind: "text", hint: "Leave empty so anyone with the address can join." },
+  { key: "port", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
+  { key: "max_players", label: "Max players", kind: "number", min: 0, max: 1000, hint: "0 means no limit." },
+  { key: "hearth_whitelist", label: "Whitelist only", kind: "bool", hint: "Only players on the whitelist (Players tab) can join." },
+  { key: "require_user_verification", label: "Require factorio.com accounts", kind: "bool", hint: "Turn off only for players without a factorio.com account." },
+  { key: "auto_pause", label: "Pause when nobody's online", kind: "bool" },
+  { key: "only_admins_can_pause_the_game", label: "Only admins can pause", kind: "bool" },
+  { key: "allow_commands", label: "Console commands", kind: "select", options: ["admins-only", "true", "false"], labels: { "admins-only": "Admins only", true: "Everyone", false: "Nobody" } },
+  { key: "autosave_interval", label: "Autosave every (minutes)", kind: "number", min: 1, max: 120 },
+  { key: "afk_autokick_interval", label: "Kick idle players after (minutes)", kind: "number", min: 0, max: 600, hint: "0 never kicks." },
+];
+
 const TERRARIA_FIELDS: Field[] = [
   { key: "worldname", label: "World name", kind: "text", hint: "A new world is created on the next start if none exists with this name." },
   { key: "autocreate", label: "World size", kind: "select", options: ["1", "2", "3"], labels: { "1": "Small", "2": "Medium", "3": "Large" }, hint: "Used when the world is created." },
@@ -68,6 +83,7 @@ const TERRARIA_FIELDS: Field[] = [
 
 const FIELDS: Record<string, Field[]> = {
   terraria: TERRARIA_FIELDS,
+  factorio: FACTORIO_FIELDS,
   "minecraft-java": JAVA_FIELDS,
   "minecraft-bedrock": BEDROCK_FIELDS,
   palworld: PALWORLD_FIELDS,

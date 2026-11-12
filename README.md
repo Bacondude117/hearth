@@ -1,6 +1,6 @@
 # Hearth
 
-**Host game servers on your own PC** (Minecraft Java & Bedrock, modded Minecraft, Terraria and tModLoader, Palworld). Pick a game, click create, and Hearth downloads and
+**Host game servers on your own PC** (Minecraft Java & Bedrock, modded Minecraft, Terraria and tModLoader, Palworld, Factorio). Pick a game, click create, and Hearth downloads and
 runs everything it needs, including the right Java version. One click shares the server online
 through [playit.gg](https://playit.gg), so friends can join without router setup or port forwarding.
 
@@ -11,6 +11,7 @@ through [playit.gg](https://playit.gg), so friends can join without router setup
 - **Minecraft: Java Edition**: Paper (recommended), Vanilla, or modded with **Fabric, NeoForge or Forge**
 - **Terraria**: the official dedicated server, with world setup, console, players and bans
 - **Modded Terraria (tModLoader)**: copy the mods enabled in your own tModLoader with one click, or add `.tmod` files; players get missing mods when they join
+- **Factorio**: runs the server with the Factorio installed on your PC (Steam or factorio.com), with its own map, saves and mods; admins, bans and whitelist from the Players tab
 - **Palworld**: installed and updated through Steam, with players, kick/ban, broadcast and settings
 - **Modpacks**: import a Modrinth `.mrpack` or a pack's server pack `.zip`, and manage mods/plugins from the **Mods** tab
 - **Minecraft: Bedrock Edition**: Mojang's official Bedrock Dedicated Server, with one-click updates that keep your worlds

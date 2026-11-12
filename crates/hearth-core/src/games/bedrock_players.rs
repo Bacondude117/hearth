@@ -115,6 +115,7 @@ impl PlayerAdmin for BedrockPlayers {
         PlayerCaps {
             roles: vec![Role::Visitor, Role::Member, Role::Operator],
             can_ban: false,
+            ban_reason: false,
             game_modes: GAME_MODES.to_vec(),
             has_whitelist: true,
             whitelist_label: "Allow list",

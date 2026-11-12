@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4038"/><stop offset="1" stop-color="#2a2420"/></linearGradient>
+  </defs>
+  <clipPath id="r"><rect width="64" height="64" rx="14"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="64" height="64" fill="url(#bg)"/>
+    <!-- conveyor belt -->
+    <rect x="0" y="46" width="64" height="12" fill="#3a3530"/>
+    <rect x="0" y="46" width="64" height="2" fill="#6b6259"/>
+    <rect x="0" y="56" width="64" height="2" fill="#6b6259"/>
+    <g fill="#d9a441">
+      <path d="M4 49 l5 3 -5 3 z"/><path d="M16 49 l5 3 -5 3 z"/><path d="M28 49 l5 3 -5 3 z"/>
+      <path d="M40 49 l5 3 -5 3 z"/><path d="M52 49 l5 3 -5 3 z"/>
+    </g>
+    <!-- gear -->
+    <g transform="translate(32 25)">
+      <g fill="#e8892c">
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(45)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(90)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(135)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(180)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(225)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(270)"/>
+        <rect x="-4" y="-19" width="8" height="8" rx="1.5" transform="rotate(315)"/>
+        <circle r="13"/>
+      </g>
+      <circle r="5.5" fill="#2a2420"/>
+      <circle r="13" fill="none" stroke="#b5641c" stroke-width="1.5"/>
+    </g>
+  </g>
+</svg>

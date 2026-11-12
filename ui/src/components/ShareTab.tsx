@@ -9,6 +9,7 @@ const JOIN_HELP: Record<string, string> = {
   "minecraft-bedrock": "In Minecraft: Play → Servers → Add Server, then fill in both boxes below.",
   palworld: "In Palworld: Join Multiplayer Game, paste this address (including the :port) into the box at the bottom, and Connect.",
   terraria: "In Terraria: Multiplayer → Join via IP, pick a character, then fill in both boxes below.",
+  factorio: "In Factorio: Multiplayer → Connect to address, and paste this address (including the :port).",
 };
 
 /** Games whose join screen asks for the address and the port in separate boxes. */

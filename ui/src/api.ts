@@ -137,6 +137,8 @@ export interface PlayersView {
   caps: {
     roles: Role[];
     canBan: boolean;
+    /** Whether the banned player sees a reason (Minecraft Java). */
+    banReason: boolean;
     gameModes: string[];
     hasWhitelist: boolean;
     whitelistLabel: string;

@@ -44,6 +44,8 @@ pub struct PlayerEntry {
 pub struct PlayerCaps {
     pub roles: Vec<Role>,
     pub can_ban: bool,
+    /// Whether a ban reason is shown to the banned player (otherwise the UI doesn't ask).
+    pub ban_reason: bool,
     pub game_modes: Vec<&'static str>,
     /// Whether the game has a whitelist at all.
     pub has_whitelist: bool,

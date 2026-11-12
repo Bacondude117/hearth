@@ -495,6 +495,7 @@ impl PlayerAdmin for TerrariaPlayers {
         PlayerCaps {
             roles: vec![],
             can_ban: true,
+            ban_reason: false,
             game_modes: vec![],
             has_whitelist: false,
             whitelist_label: "",

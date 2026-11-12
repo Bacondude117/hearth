@@ -22,6 +22,7 @@ pub mod playit;
 pub mod process;
 pub mod properties;
 pub mod steamcmd;
+pub mod steamlib;
 pub mod system;
 mod winjob;
 
