@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, isActive, onEvent, type AppInfo, type GameInfo, type PlayitStatus, type Server } from "../api";
-import { copy, displayState, errorText, flavorLabel } from "../util";
+import { copy, displayState, errorText, flavorLabel, formatBytes } from "../util";
 import { Console } from "./Console";
 import { SettingsTab } from "./SettingsTab";
 import { ContentTab } from "./ContentTab";
@@ -134,6 +134,7 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
             {localAddress}
           </button>
         </div>
+        <DiskStat server={server} active={active} />
         <div className="stat">
           <span className="stat-label">Online address</span>
           {tunnel ? (
@@ -191,5 +192,30 @@ export function ServerView({ server, game, info, playit, progress, onDeleted, on
         {tab === "share" && <ShareTab server={server} game={game} playit={playit} onOpenPlayit={onOpenPlayit} />}
       </div>
     </section>
+  );
+}
+
+/** How much space the server's folder takes. Re-measured when it starts, stops or finishes
+ * installing, and every few minutes while it runs (worlds and logs grow). */
+function DiskStat({ server, active }: { server: Server; active: boolean }) {
+  const [bytes, setBytes] = useState<number | null>(null);
+  const measure = () => api.serverDiskUsage(server.id).then(setBytes, () => setBytes(null));
+
+  useEffect(() => {
+    setBytes(null);
+    void measure();
+    if (!active) return;
+    const t = setInterval(() => void measure(), 3 * 60_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [server.id, active, server.installState.state]);
+
+  return (
+    <div className="stat">
+      <span className="stat-label">On disk</span>
+      <button className="copyable" title="Server files, worlds, mods and logs. Click to open the folder." onClick={() => void api.openFolder(server.id)}>
+        {bytes === null ? "…" : formatBytes(bytes)}
+      </button>
+    </div>
   );
 }

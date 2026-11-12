@@ -22,6 +22,7 @@ const games: GameInfo[] = [
     defaultPort: 25565,
     protocol: "tcp",
     configurableMemory: true,
+    memoryLimit: false,
     eula: {
       text: "Running a Minecraft server requires agreeing to the Minecraft End User License Agreement.",
       links: [["Minecraft EULA", "https://aka.ms/MinecraftEULA"]],
@@ -38,6 +39,7 @@ const games: GameInfo[] = [
     defaultPort: 19132,
     protocol: "udp",
     configurableMemory: false,
+    memoryLimit: true,
     eula: {
       text: "Running the Bedrock Dedicated Server requires agreeing to the Minecraft End User License Agreement and the Microsoft Privacy Policy.",
       links: [
@@ -57,6 +59,7 @@ const games: GameInfo[] = [
     defaultPort: 8211,
     protocol: "udp",
     configurableMemory: false,
+    memoryLimit: true,
     eula: null,
     playitTunnelType: null,
     commandHint: "Broadcast a message to everyone in the game",
@@ -73,6 +76,7 @@ const games: GameInfo[] = [
     defaultPort: 7777,
     protocol: "tcp",
     configurableMemory: false,
+    memoryLimit: true,
     eula: null,
     playitTunnelType: "terraria",
     commandHint: "Type a command, e.g. say hello, save, or playing",
@@ -427,6 +431,11 @@ const handlers: Record<string, (a: any) => unknown> = {
     contentStore.set(id, list);
     list.push({ file: "jei-1.21.1-fabric-19.21.0.jar", name: "Just Enough Items", version: "19.21.0", enabled: true, size: 1_204_331 });
     return ["jei-1.21.1-fabric-19.21.0.jar"];
+  },
+  server_disk_usage: async ({ id }) => {
+    await sleep(300);
+    const s = find(id);
+    return s.game === "palworld" ? 6_442_450_944 : s.game === "terraria" ? 312_475_648 : 1_288_490_189;
   },
   import_client_content: async ({ id }) => {
     await sleep(600);

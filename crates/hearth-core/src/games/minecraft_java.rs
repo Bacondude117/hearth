@@ -184,6 +184,7 @@ impl GameProvider for MinecraftJava {
             default_port: 25565,
             protocol: Protocol::Tcp,
             configurable_memory: true,
+            memory_limit: false,
             eula: Some(Eula {
                 text: "Running a Minecraft server requires agreeing to the Minecraft End User License Agreement.",
                 links: vec![("Minecraft EULA", "https://aka.ms/MinecraftEULA")],
@@ -290,6 +291,7 @@ impl GameProvider for MinecraftJava {
             cwd: server_dir.to_path_buf(),
             env: vec![],
             console_encoding: Default::default(),
+            memory_limit_mb: None,
         })
     }
 

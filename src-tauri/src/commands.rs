@@ -199,6 +199,11 @@ pub async fn import_pack(state: State<'_, AppState>, req: ImportPack) -> R<Serve
 }
 
 #[tauri::command]
+pub async fn server_disk_usage(state: State<'_, AppState>, id: String) -> R<u64> {
+    state.manager.disk_usage(&id).await.map_err(e)
+}
+
+#[tauri::command]
 pub fn list_content(state: State<'_, AppState>, id: String) -> R<Vec<ContentEntry>> {
     state.manager.list_content(&id).map_err(e)
 }

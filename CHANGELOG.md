@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.0] - 2026-11-12
+
+### Added
+- **Memory limit** for Minecraft Bedrock, Palworld, Terraria and tModLoader servers, when creating them or in Settings. It's off by default (the game uses what it needs). Turned on, Windows caps the server's memory so it can't crowd out the rest of your PC; .NET servers (Terraria, tModLoader) also keep their heap under it. Minecraft Java keeps its memory slider.
+- **On disk**: how much space each server's folder (server files, worlds, mods, logs) takes, shown at the top of the server page. Click it to open the folder.
+
 ## [0.8.1] - 2026-11-12
 
 ### Fixed

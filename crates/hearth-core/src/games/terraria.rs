@@ -149,6 +149,7 @@ impl GameProvider for Terraria {
             default_port: 7777,
             protocol: Protocol::Tcp,
             configurable_memory: false,
+            memory_limit: true,
             eula: None,
             playit_tunnel_type: Some("terraria"),
             command_hint: "Type a command, e.g. say hello, save, or playing",
@@ -256,6 +257,7 @@ impl GameProvider for Terraria {
             cwd: dir.to_path_buf(),
             env: vec![],
             console_encoding: console_encoding(),
+            memory_limit_mb: None,
         })
     }
 
@@ -402,6 +404,7 @@ fn launch_tml(ctx: &GameContext, dir: &Path) -> Result<LaunchSpec> {
         cwd: dir.to_path_buf(),
         env: vec![("DOTNET_ROOT".into(), path(&ctx.dotnet.dir(&channel)))],
         console_encoding: console_encoding(),
+        memory_limit_mb: None,
     })
 }
 

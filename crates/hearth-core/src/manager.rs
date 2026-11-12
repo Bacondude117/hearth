@@ -1,7 +1,7 @@
 //! `ServerManager` is the one entry point the UI talks to.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -281,6 +281,15 @@ impl ServerManager {
             let m = req.memory_mb.unwrap_or(crate::games::minecraft_java::DEFAULT_MEMORY_MB);
             validate_memory(m)?;
             Some(m)
+        } else if info.memory_limit {
+            // Optional cap; no value (or 0) means no limit.
+            match req.memory_mb.filter(|&m| m > 0) {
+                Some(m) => {
+                    validate_memory(m)?;
+                    Some(m)
+                }
+                None => None,
+            }
         } else {
             None
         };
@@ -491,7 +500,10 @@ impl ServerManager {
             self.sync_voice_host(&inst).await;
         }
         let dir = self.paths.server_dir(id);
-        let spec = provider.launch(&self.ctx, &inst, &dir)?;
+        let mut spec = provider.launch(&self.ctx, &inst, &dir)?;
+        if provider.info().memory_limit {
+            spec.memory_limit_mb = inst.memory_mb;
+        }
         let console = self.console(id);
         let parser_provider = provider.clone();
         let book = self.player_book(id);
@@ -701,8 +713,13 @@ impl ServerManager {
             inst.name = n.to_owned();
         }
         if let Some(m) = memory_mb {
-            validate_memory(m)?;
-            inst.memory_mb = Some(m);
+            let limit_only = self.registry.get(&inst.game)?.info().memory_limit;
+            if m == 0 && limit_only {
+                inst.memory_mb = None; // remove the limit
+            } else {
+                validate_memory(m)?;
+                inst.memory_mb = Some(m);
+            }
         }
         self.store.save(&inst)?;
         self.changed();
@@ -816,6 +833,15 @@ impl ServerManager {
     pub fn icon_data_url(&self, id: &str) -> Result<Option<String>> {
         self.store.get(id)?;
         crate::icons::icon_data_url(&self.paths.instance_dir(id))
+    }
+
+    /// Bytes the server's folder takes on disk (server files, worlds, mods, backups, logs).
+    pub async fn disk_usage(&self, id: &str) -> Result<u64> {
+        self.store.get(id)?;
+        let dir = self.paths.instance_dir(id);
+        Ok(tokio::task::spawn_blocking(move || dir_size(&dir))
+            .await
+            .expect("size task panicked"))
     }
 
     // ---- mods / plugins -----------------------------------------------------------------------
@@ -1202,6 +1228,23 @@ fn provider_marker(inst: &Instance) -> &'static str {
     }
 }
 
+/// Total size of the files under `dir`, not following symlinks. Unreadable entries count as 0.
+pub fn dir_size(dir: &Path) -> u64 {
+    let mut total = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for e in entries.flatten() {
+            match e.file_type() {
+                Ok(t) if t.is_dir() => stack.push(e.path()),
+                Ok(t) if t.is_file() => total += e.metadata().map(|m| m.len()).unwrap_or(0),
+                _ => {}
+            }
+        }
+    }
+    total
+}
+
 fn validate_memory(m: u32) -> Result<()> {
     if m < MIN_MEMORY_MB {
         return Err(Error::InvalidInput(format!(
@@ -1214,4 +1257,20 @@ fn validate_memory(m: u32) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn measures_folder_size() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("server/world/region")).unwrap();
+        std::fs::write(t.path().join("server/server.jar"), vec![0u8; 1000]).unwrap();
+        std::fs::write(t.path().join("server/world/region/r.0.0.mca"), vec![0u8; 2500]).unwrap();
+        std::fs::write(t.path().join("hearth.json"), b"{}").unwrap();
+        assert_eq!(dir_size(t.path()), 3502);
+        assert_eq!(dir_size(&t.path().join("missing")), 0);
+    }
 }

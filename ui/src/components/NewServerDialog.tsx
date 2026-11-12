@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type GameInfo, type GameVersion, type Server } from "../api";
-import { errorText, formatMb } from "../util";
+import { errorText } from "../util";
+import { MemoryField } from "./MemoryField";
 import { Modal } from "./Modal";
 
 interface Props {
@@ -22,7 +23,7 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
   const [version, setVersion] = useState("");
   const [name, setName] = useState("");
   const [port, setPort] = useState("");
-  const [memory, setMemory] = useState(2048);
+  const [memory, setMemory] = useState<number | null>(2048);
   const [eula, setEula] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,15 +41,16 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
     setEula(false);
     setError(null);
     setBusy(false);
-    setMemory(Math.min(4096, maxMemory));
   }, [open, maxMemory]);
 
-  // Default flavor + port when the game changes.
+  // Default flavor, port and memory when the game changes.
   useEffect(() => {
     if (!open || !game) return;
+    setMemory(game.configurableMemory ? Math.min(4096, maxMemory) : null);
     setFlavor(game.flavors[0].id);
     setPort("");
     api.suggestPort(game.id).then((p) => setPort(String(p)), () => setPort(String(game.defaultPort)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, game]);
 
   // Load versions for the chosen flavor.
@@ -88,7 +90,7 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
         flavor,
         version,
         port: portNum,
-        memoryMb: game.configurableMemory ? memory : null,
+        memoryMb: game.configurableMemory || game.memoryLimit ? memory : null,
         acceptEula: eula,
       });
       onCreated(s);
@@ -201,17 +203,7 @@ export function NewServerDialog({ open, games, totalMemoryMb, onClose, onCreated
 
         {game.setupNote && <p className="banner info small">{game.setupNote}</p>}
 
-        {game.configurableMemory && (
-          <label className="field">
-            <span>
-              Memory <strong className="mono">{formatMb(memory)}</strong>
-            </span>
-            <input type="range" min={1024} max={maxMemory} step={512} value={memory} onChange={(e) => setMemory(+e.target.value)} />
-            <small className="hint">
-              2–4 GB suits a handful of friends. {totalMemoryMb ? `This PC has ${formatMb(totalMemoryMb)}.` : ""}
-            </small>
-          </label>
-        )}
+        <MemoryField game={game} value={memory} onChange={setMemory} max={maxMemory} totalMemoryMb={totalMemoryMb} />
 
         {game.eula && (
           <div className="eula">

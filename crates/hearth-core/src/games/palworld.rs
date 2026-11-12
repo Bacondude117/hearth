@@ -108,6 +108,7 @@ impl GameProvider for Palworld {
             default_port: 8211,
             protocol: Protocol::Udp,
             configurable_memory: false,
+            memory_limit: true,
             eula: None,
             // Accepted by playit's API although its published client doesn't list it.
             playit_tunnel_type: Some("palworld"),
@@ -163,6 +164,7 @@ impl GameProvider for Palworld {
             cwd: dir.to_path_buf(),
             env: vec![],
             console_encoding: Default::default(),
+            memory_limit_mb: None,
         })
     }
 

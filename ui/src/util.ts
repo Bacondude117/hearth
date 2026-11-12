@@ -47,6 +47,7 @@ export function flavorLabel(s: Server): string {
 export const loaderName = (flavor: string | null) => (flavor ? (FLAVOR_NAMES[flavor] ?? flavor) : "Unknown");
 
 export function formatBytes(n: number): string {
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(n >= 10 * (1 << 30) ? 0 : 1)} GB`;
   if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`;
   if (n >= 1 << 10) return `${Math.round(n / (1 << 10))} KB`;
   return `${n} B`;

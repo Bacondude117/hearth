@@ -65,6 +65,9 @@ pub struct GameInfo {
     pub protocol: Protocol,
     /// Whether the user picks a RAM amount (JVM games).
     pub configurable_memory: bool,
+    /// Whether the user can cap the server's memory (games with no setting of their own;
+    /// Hearth enforces it). Off by default.
+    pub memory_limit: bool,
     /// Terms the user must accept before installing.
     pub eula: Option<Eula>,
     /// Name of the playit tunnel type for this game, if playit has one (otherwise a plain
@@ -115,6 +118,8 @@ pub struct LaunchSpec {
     pub env: Vec<(String, String)>,
     /// How console commands are encoded on the server's stdin.
     pub console_encoding: ConsoleEncoding,
+    /// Hard cap on the server's memory (games without their own setting; Windows only).
+    pub memory_limit_mb: Option<u32>,
 }
 
 /// Text encoding a server expects on its console input.

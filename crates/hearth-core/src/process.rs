@@ -135,6 +135,8 @@ pub struct ServerProcess {
     sink: Arc<dyn EventSink>,
     stop_command: String,
     console_encoding: crate::games::ConsoleEncoding,
+    /// Keeps the server's own job (memory limit) open while it runs.
+    _job: Option<crate::winjob::JobGuard>,
 }
 
 impl ServerProcess {
@@ -163,7 +165,21 @@ impl ServerProcess {
         let mut child = cmd.spawn().map_err(|e| {
             Error::InvalidInput(format!("Could not start the server ({}): {e}", spec.program.display()))
         })?;
-        crate::winjob::adopt(&child);
+        let job = match spec.memory_limit_mb {
+            Some(mb) => {
+                let job = crate::winjob::adopt_limited(&child, mb);
+                if job.is_some() {
+                    console.push(LogStream::System, format!("Memory limit: {mb} MB"));
+                } else {
+                    crate::winjob::adopt(&child);
+                }
+                job
+            }
+            None => {
+                crate::winjob::adopt(&child);
+                None
+            }
+        };
 
         let stdout = child.stdout.take().expect("piped");
         let stderr = child.stderr.take().expect("piped");
@@ -184,6 +200,7 @@ impl ServerProcess {
             sink,
             stop_command: stop_command.to_owned(),
             console_encoding: spec.console_encoding,
+            _job: job,
         });
         proc.emit_status();
 

@@ -100,6 +100,7 @@ impl GameProvider for MinecraftBedrock {
             default_port: 19132,
             protocol: Protocol::Udp,
             configurable_memory: false,
+            memory_limit: true,
             eula: Some(Eula {
                 text: "Running the Bedrock Dedicated Server requires agreeing to the Minecraft End User License Agreement and the Microsoft Privacy Policy.",
                 links: vec![
@@ -197,6 +198,7 @@ impl GameProvider for MinecraftBedrock {
             cwd: server_dir.to_path_buf(),
             env,
             console_encoding: Default::default(),
+            memory_limit_mb: None,
         })
     }
 

@@ -91,6 +91,8 @@ export interface GameInfo {
   defaultPort: number;
   protocol: Protocol;
   configurableMemory: boolean;
+  /** Optional memory cap Hearth enforces (games without their own memory setting). */
+  memoryLimit: boolean;
   eula: { text: string; links: [string, string][] } | null;
   playitTunnelType: string | null;
   commandHint: string;
@@ -263,6 +265,7 @@ export const api = {
   importPack: (req: ImportPack) => call<Server>("import_pack", { req }),
   listContent: (id: string) => call<ContentEntry[]>("list_content", { id }),
   addContent: (id: string) => call<string[]>("add_content", { id }),
+  serverDiskUsage: (id: string) => call<number>("server_disk_usage", { id }),
   importClientContent: (id: string) => call<ClientImport>("import_client_content", { id }),
   setContentEnabled: (id: string, file: string, enabled: boolean) => call<void>("set_content_enabled", { id, file, enabled }),
   deleteContent: (id: string, file: string) => call<void>("delete_content", { id, file }),

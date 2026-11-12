@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, isActive, type AppInfo, type GameInfo, type GameVersion, type Server } from "../api";
-import { errorText, formatMb } from "../util";
+import { errorText } from "../util";
+import { MemoryField } from "./MemoryField";
 import { Modal } from "./Modal";
 import { ServerIcon } from "./ServerIcon";
 import { useToast } from "./Toasts";
@@ -86,7 +87,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(server.name);
-  const [memory, setMemory] = useState(server.memoryMb ?? 2048);
+  const [memory, setMemory] = useState<number | null>(server.memoryMb);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [removeTunnel, setRemoveTunnel] = useState(true);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -105,7 +106,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
 
   useEffect(() => {
     setName(server.name);
-    setMemory(server.memoryMb ?? 2048);
+    setMemory(server.memoryMb);
     setProps(null);
     if (installed) void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,14 +119,17 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
     (f) => values.has(f.key) || (f.kind === "number" && f.port) || server.game === "terraria",
   );
   const dirty = Object.keys(edits).some((k) => edits[k] !== values.get(k));
-  const metaDirty = name.trim() !== server.name || (game?.configurableMemory && memory !== server.memoryMb);
+  const memoryEditable = !!game && (game.configurableMemory || game.memoryLimit);
+  const memoryDirty = memoryEditable && memory !== server.memoryMb;
+  const metaDirty = name.trim() !== server.name || memoryDirty;
   const maxMemory = Math.max(1024, Math.min(32768, Math.floor(((info.totalMemoryMb ?? 8192) - 2048) / 512) * 512));
 
   const save = async () => {
     setSaving(true);
     try {
       if (metaDirty) {
-        await api.updateServer(server.id, name.trim() !== server.name ? name.trim() : null, game?.configurableMemory && memory !== server.memoryMb ? memory : null);
+        // 0 removes a memory limit.
+        await api.updateServer(server.id, name.trim() !== server.name ? name.trim() : null, memoryDirty ? (memory ?? 0) : null);
       }
       if (dirty) {
         const changed = Object.fromEntries(Object.entries(edits).filter(([k, v]) => v !== values.get(k)));
@@ -191,14 +195,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
             <span>Name in Hearth</span>
             <input value={name} maxLength={48} onChange={(e) => setName(e.target.value)} />
           </label>
-          {game?.configurableMemory && (
-            <label className="field">
-              <span>
-                Memory <strong className="mono">{formatMb(memory)}</strong>
-              </span>
-              <input type="range" min={1024} max={Math.max(maxMemory, memory)} step={512} value={memory} onChange={(e) => setMemory(+e.target.value)} />
-            </label>
-          )}
+          {game && <MemoryField game={game} value={memory} onChange={setMemory} max={maxMemory} totalMemoryMb={info.totalMemoryMb} hint={!game.configurableMemory} />}
         </div>
       </section>
 
@@ -248,7 +245,7 @@ export function SettingsTab({ server, game, info, onDeleted }: Props) {
             onClick={() => {
               setEdits({});
               setName(server.name);
-              setMemory(server.memoryMb ?? 2048);
+              setMemory(server.memoryMb);
             }}
           >
             Discard
