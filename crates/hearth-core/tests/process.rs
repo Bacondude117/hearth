@@ -21,6 +21,7 @@ fn spawn(mode: &str) -> (Arc<ServerProcess>, Arc<Console>, Arc<VecSink>) {
         console_encoding: Default::default(),
         memory_limit_mb: None,
         log_file: None,
+        own_console: false,
     };
     let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
     let p = ServerProcess::spawn("t-0001".into(), &spec, parser, "stop", console.clone(), sink.clone()).unwrap();
@@ -119,6 +120,7 @@ async fn spawn_failure_is_a_readable_error() {
         console_encoding: Default::default(),
         memory_limit_mb: None,
         log_file: None,
+        own_console: false,
     };
     let parser: LineParser = Arc::new(|_: &str| None);
     let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink)
@@ -158,6 +160,7 @@ async fn follows_a_log_file() {
         console_encoding: Default::default(),
         memory_limit_mb: None,
         log_file: Some(log.clone()),
+        own_console: false,
     };
     let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
     let p = ServerProcess::spawn("t-0002".into(), &spec, parser, "", console.clone(), sink).unwrap();

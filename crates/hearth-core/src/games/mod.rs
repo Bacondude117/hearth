@@ -125,6 +125,10 @@ pub struct LaunchSpec {
     /// A log file to show in the console, for servers whose console output can't be piped
     /// (Source engine on Windows). Removed before start, then followed as it grows.
     pub log_file: Option<PathBuf>,
+    /// Windows: start the server with a (hidden) console of its own instead of Hearth's pipes,
+    /// for servers that read their console directly (Source's `srcds -console`). Such servers
+    /// get no stdin and no piped output: use `log_file` and an admin protocol instead.
+    pub own_console: bool,
 }
 
 /// Text encoding a server expects on its console input.

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1] - 2026-11-13
+
+### Fixed
+- Left 4 Dead 2 servers quit right after loading the map (`GetNumberOfConsoleInputEvents`, exit code 100): the Windows server reads its own console and fails when Hearth pipes it. It now gets a hidden console of its own; Hearth still shows its log and sends commands over RCON. Console lines are no longer shown twice.
+- The game mode is now applied (`map <campaign> <mode>`); `+mp_gamemode` isn't accepted on the command line.
+- `Unknown command "Game"`: the comment Hearth wrote at the top of `server.cfg` had a non-ASCII arrow, which Source misreads. It's replaced on the next start.
+
 ## [0.11.0] - 2026-11-13
 
 ### Added

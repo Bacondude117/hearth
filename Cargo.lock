@@ -1474,7 +1474,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hearth"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "hearth-core",
  "serde",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "hearth-core"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",

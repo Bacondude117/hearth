@@ -56,8 +56,8 @@ mod imp {
     }
 
     /// Puts the server in a job of its own that limits its memory to `limit_mb`.
-    pub fn adopt_limited(child: &tokio::process::Child, limit_mb: u32) -> Option<JobGuard> {
-        let proc_handle = child.raw_handle()?;
+    pub fn adopt_limited(proc_handle: Option<usize>, limit_mb: u32) -> Option<JobGuard> {
+        let proc_handle = proc_handle?;
         // SAFETY: plain Win32 calls with valid, zero-initialized structures.
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
@@ -82,8 +82,8 @@ mod imp {
         }
     }
 
-    pub fn adopt(child: &tokio::process::Child) {
-        let (Some(job), Some(proc_handle)) = (job(), child.raw_handle()) else {
+    pub fn adopt(proc_handle: Option<usize>) {
+        let (Some(job), Some(proc_handle)) = (job(), proc_handle) else {
             tracing::warn!("could not attach server process to job object");
             return;
         };
@@ -98,9 +98,9 @@ mod imp {
 mod imp {
     pub struct JobGuard;
 
-    pub fn adopt(_child: &tokio::process::Child) {}
+    pub fn adopt(_proc_handle: Option<usize>) {}
 
-    pub fn adopt_limited(_child: &tokio::process::Child, _limit_mb: u32) -> Option<JobGuard> {
+    pub fn adopt_limited(_proc_handle: Option<usize>, _limit_mb: u32) -> Option<JobGuard> {
         None
     }
 }

@@ -259,6 +259,7 @@ impl GameProvider for Terraria {
             console_encoding: console_encoding(),
             memory_limit_mb: None,
             log_file: None,
+            own_console: false,
         })
     }
 
@@ -407,6 +408,7 @@ fn launch_tml(ctx: &GameContext, dir: &Path) -> Result<LaunchSpec> {
         console_encoding: console_encoding(),
         memory_limit_mb: None,
         log_file: None,
+        own_console: false,
     })
 }
 

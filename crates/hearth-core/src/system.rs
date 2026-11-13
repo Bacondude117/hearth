@@ -31,7 +31,7 @@ mod imp {
         let mut s: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
         s.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
         let ok = unsafe { GlobalMemoryStatusEx(&mut s) };
-        (ok != 0).then(|| s.ullTotalPhys / (1024 * 1024))
+        (ok != 0).then_some(s.ullTotalPhys / (1024 * 1024))
     }
 }
 

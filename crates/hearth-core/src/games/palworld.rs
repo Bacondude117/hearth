@@ -166,6 +166,7 @@ impl GameProvider for Palworld {
             console_encoding: Default::default(),
             memory_limit_mb: None,
             log_file: None,
+            own_console: false,
         })
     }
 

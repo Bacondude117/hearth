@@ -24,6 +24,8 @@ pub const APP_ID: u32 = 222860;
 const GAME: &str = "left4dead2";
 const HEARTH_FILE: &str = "hearth-l4d2.json";
 const ADDONS: &str = "left4dead2/addons";
+/// First line of server.cfg. ASCII only: Source misreads other characters.
+const HEADER: &str = "// Written by Hearth. Change these in Hearth's Settings tab.";
 
 /// Official campaigns: first map and name.
 pub const CAMPAIGNS: &[(&str, &str)] = &[
@@ -167,11 +169,17 @@ pub(crate) fn prepare(dir: &Path, inst: &Instance, fresh: bool) -> Result<()> {
     let mut cfg = SourceCfg::load(&path)?;
     if fresh || cfg.entries().is_empty() {
         cfg = SourceCfg::default();
-        cfg.push_line("// Written by Hearth. Settings → Game settings edits this file.");
+        cfg.push_line(HEADER);
         cfg.set("hostname", &inst.name);
         cfg.set("sv_password", "");
         cfg.set("z_difficulty", "Normal");
         cfg.set("sv_lan", "0");
+    }
+    // Source's cfg parser chokes on non-ASCII text, even in comments (0.11.0 wrote an arrow).
+    cfg.lines
+        .retain(|l| !(l.trim_start().starts_with("//") && l.contains("Written by Hearth") && !l.is_ascii()));
+    if !cfg.lines.iter().any(|l| l == HEADER) {
+        cfg.lines.insert(0, HEADER.to_owned());
     }
     if cfg.get("rcon_password").is_none_or(|p| p.is_empty()) {
         cfg.set("rcon_password", &random_password());
@@ -393,16 +401,17 @@ impl GameProvider for Left4Dead2 {
                 inst.port.to_string(),
                 "-usercon".into(),
                 "-condebug".into(),
-                "+mp_gamemode".into(),
-                mode,
+                // `map <name> <mode>`: mp_gamemode can't be set from the command line.
                 "+map".into(),
                 map,
+                mode,
             ],
             cwd: dir.to_path_buf(),
             env: vec![],
             console_encoding: Default::default(),
             memory_limit_mb: None,
             log_file: Some(dir.join(GAME).join("console.log")),
+            own_console: true,
         })
     }
 
@@ -746,6 +755,7 @@ mod tests {
         assert_eq!(cfg.get("hostname").as_deref(), Some("Old Name"));
         assert_eq!(cfg.get("z_difficulty").as_deref(), Some("Hard"));
         cfg.set("hostname", "New \"Name\"");
+        assert!(cfg.lines.iter().all(|l| l.is_ascii()));
         cfg.set("sv_region", "3");
         let text = cfg.lines.join("\n");
         assert!(text.contains("hostname \"New 'Name'\""));
@@ -767,6 +777,15 @@ mod tests {
         assert_eq!(rcon_password(t.path()).unwrap().len(), 24);
         assert!(cfg.has_line("exec banned_user.cfg"));
         assert_eq!(port_of(t.path()), Some(27015));
+
+        // A 0.11.0 header with a non-ASCII arrow is replaced on the next start.
+        let mut old = SourceCfg::load(&server_cfg(t.path())).unwrap();
+        old.lines[0] = "// Written by Hearth. Settings → Game settings edits this file.".into();
+        old.save(&server_cfg(t.path())).unwrap();
+        prepare(t.path(), &inst(), false).unwrap();
+        let text = std::fs::read_to_string(server_cfg(t.path())).unwrap();
+        assert!(text.is_ascii(), "{text}");
+        assert_eq!(text.lines().next(), Some(HEADER));
 
         // The password survives a reinstall and never shows in Settings.
         let pw = rcon_password(t.path()).unwrap();

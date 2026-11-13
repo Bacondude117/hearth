@@ -120,6 +120,38 @@ impl Console {
     }
 }
 
+type BoxedRead = Box<dyn AsyncRead + Unpin + Send>;
+
+/// The running server: a normal piped child, or (Windows) one with its own console.
+/// One per running server, so the size difference between variants doesn't matter.
+#[allow(clippy::large_enum_variant)]
+enum Child {
+    Tokio(tokio::process::Child),
+    #[cfg(windows)]
+    Console(crate::winproc::ConsoleChild),
+}
+
+impl Child {
+    /// Waits for exit; the exit code if the OS reports one.
+    async fn wait(&mut self) -> Option<i32> {
+        match self {
+            Self::Tokio(c) => c.wait().await.ok().and_then(|s| s.code()),
+            #[cfg(windows)]
+            Self::Console(c) => c.wait().await,
+        }
+    }
+
+    fn kill(&mut self) {
+        match self {
+            Self::Tokio(c) => {
+                let _ = c.start_kill();
+            }
+            #[cfg(windows)]
+            Self::Console(c) => c.kill(),
+        }
+    }
+}
+
 pub type LineParser = Arc<dyn Fn(&str) -> Option<LineEvent> + Send + Sync>;
 
 pub struct ServerProcess {
@@ -149,6 +181,34 @@ impl ServerProcess {
         console: Arc<Console>,
         sink: Arc<dyn EventSink>,
     ) -> Result<Arc<Self>> {
+        if let Some(log) = &spec.log_file {
+            // Old output would otherwise be replayed into the console.
+            let _ = std::fs::remove_file(log);
+        }
+        console.push(LogStream::System, format!("Starting {}", spec.program.display()));
+        let start_err = |e: std::io::Error| {
+            Error::InvalidInput(format!("Could not start the server ({}): {e}", spec.program.display()))
+        };
+
+        #[cfg(windows)]
+        if spec.own_console {
+            let child = crate::winproc::ConsoleChild::spawn(&spec.program, &spec.args, &spec.cwd, &spec.env)
+                .map_err(start_err)?;
+            let handle = Some(child.raw_handle());
+            let empty = || Box::new(tokio::io::empty()) as BoxedRead;
+            return Self::start(
+                instance_id,
+                spec,
+                parser,
+                stop_command,
+                console,
+                sink,
+                Child::Console(child),
+                handle,
+                (None, empty(), empty()),
+            );
+        }
+
         let mut cmd = Command::new(&spec.program);
         cmd.args(&spec.args)
             .current_dir(&spec.cwd)
@@ -162,33 +222,55 @@ impl ServerProcess {
             cmd.creation_flags(crate::system::CHILD_PROCESS_FLAGS);
         }
 
-        if let Some(log) = &spec.log_file {
-            // Old output would otherwise be replayed into the console.
-            let _ = std::fs::remove_file(log);
-        }
-        console.push(LogStream::System, format!("Starting {}", spec.program.display()));
-        let mut child = cmd.spawn().map_err(|e| {
-            Error::InvalidInput(format!("Could not start the server ({}): {e}", spec.program.display()))
-        })?;
+        let mut child = cmd.spawn().map_err(start_err)?;
+        #[cfg(windows)]
+        let handle = child.raw_handle().map(|h| h as usize);
+        #[cfg(not(windows))]
+        let handle = None;
+        let stdout = Box::new(child.stdout.take().expect("piped")) as BoxedRead;
+        let stderr = Box::new(child.stderr.take().expect("piped")) as BoxedRead;
+        let stdin = child.stdin.take();
+        Self::start(
+            instance_id,
+            spec,
+            parser,
+            stop_command,
+            console,
+            sink,
+            Child::Tokio(child),
+            handle,
+            (stdin, stdout, stderr),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start(
+        instance_id: String,
+        spec: &LaunchSpec,
+        parser: LineParser,
+        stop_command: &str,
+        console: Arc<Console>,
+        sink: Arc<dyn EventSink>,
+        mut child: Child,
+        handle: Option<usize>,
+        (stdin, stdout, stderr): (Option<ChildStdin>, BoxedRead, BoxedRead),
+    ) -> Result<Arc<Self>> {
         let job = match spec.memory_limit_mb {
             Some(mb) => {
-                let job = crate::winjob::adopt_limited(&child, mb);
+                let job = crate::winjob::adopt_limited(handle, mb);
                 if job.is_some() {
                     console.push(LogStream::System, format!("Memory limit: {mb} MB"));
                 } else {
-                    crate::winjob::adopt(&child);
+                    crate::winjob::adopt(handle);
                 }
                 job
             }
             None => {
-                crate::winjob::adopt(&child);
+                crate::winjob::adopt(handle);
                 None
             }
         };
 
-        let stdout = child.stdout.take().expect("piped");
-        let stderr = child.stderr.take().expect("piped");
-        let stdin = child.stdin.take();
         let (kill_tx, kill_rx) = oneshot::channel();
         let (exit_tx, exit_rx) = watch::channel(false);
 
@@ -222,10 +304,10 @@ impl ServerProcess {
 
         let p = proc.clone();
         tokio::spawn(async move {
-            let status = tokio::select! {
-                s = child.wait() => s,
+            let code = tokio::select! {
+                c = child.wait() => c,
                 _ = kill_rx => {
-                    let _ = child.start_kill();
+                    child.kill();
                     child.wait().await
                 }
             };
@@ -236,7 +318,6 @@ impl ServerProcess {
             })
             .await;
 
-            let code = status.ok().and_then(|s| s.code());
             let requested = p.stop_requested.load(Ordering::SeqCst);
             let crashed = p.crash_seen.load(Ordering::SeqCst);
             let final_status = if !crashed && (requested || code == Some(0)) {

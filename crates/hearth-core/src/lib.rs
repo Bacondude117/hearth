@@ -26,5 +26,6 @@ pub mod steamcmd;
 pub mod steamlib;
 pub mod system;
 mod winjob;
+pub mod winproc;
 
 pub use error::{Error, Result};
