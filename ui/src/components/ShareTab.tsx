@@ -10,6 +10,7 @@ const JOIN_HELP: Record<string, string> = {
   palworld: "In Palworld: Join Multiplayer Game, paste this address (including the :port) into the box at the bottom, and Connect.",
   terraria: "In Terraria: Multiplayer → Join via IP, pick a character, then fill in both boxes below.",
   factorio: "In Factorio: Multiplayer → Connect to address, and paste this address (including the :port).",
+  left4dead2: "In Left 4 Dead 2: turn on Options → Keyboard/Mouse → Allow Developer Console, press ~, and type connect followed by this address (including the :port).",
 };
 
 /** Games whose join screen asks for the address and the port in separate boxes. */

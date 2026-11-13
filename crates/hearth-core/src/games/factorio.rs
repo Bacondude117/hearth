@@ -512,6 +512,7 @@ impl GameProvider for Factorio {
             env: vec![],
             console_encoding: Default::default(),
             memory_limit_mb: None,
+            log_file: None,
         })
     }
 

@@ -624,9 +624,18 @@ impl ServerManager {
             .console_input(&self.ctx, &inst, &self.paths.server_dir(id), line)
             .await
         {
-            r?;
-            self.console(id)
-                .push(LogStream::System, format!("> (broadcast) {line}"));
+            let console = self.console(id);
+            match r? {
+                // Sent as a message to everyone (Palworld).
+                None => console.push(LogStream::System, format!("> (broadcast) {line}")),
+                // A remote-console command and its reply (Source RCON).
+                Some(reply) => {
+                    console.push(LogStream::System, format!("> {line}"));
+                    for l in reply.lines().map(str::trim_end).filter(|l| !l.is_empty()) {
+                        console.push(LogStream::Stdout, l.to_owned());
+                    }
+                }
+            }
             return Ok(());
         }
         p.send_command(line).await?;

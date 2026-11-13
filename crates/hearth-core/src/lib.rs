@@ -21,6 +21,7 @@ pub mod players;
 pub mod playit;
 pub mod process;
 pub mod properties;
+pub mod rcon;
 pub mod steamcmd;
 pub mod steamlib;
 pub mod system;

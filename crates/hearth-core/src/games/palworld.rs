@@ -165,6 +165,7 @@ impl GameProvider for Palworld {
             env: vec![],
             console_encoding: Default::default(),
             memory_limit_mb: None,
+            log_file: None,
         })
     }
 
@@ -243,9 +244,15 @@ impl GameProvider for Palworld {
         api.shutdown(1, "Server is shutting down").await.is_ok()
     }
 
-    async fn console_input(&self, _ctx: &GameContext, _inst: &Instance, dir: &Path, line: &str) -> Option<Result<()>> {
+    async fn console_input(
+        &self,
+        _ctx: &GameContext,
+        _inst: &Instance,
+        dir: &Path,
+        line: &str,
+    ) -> Option<Result<Option<String>>> {
         Some(match api(dir) {
-            Ok(api) => api.announce(line).await,
+            Ok(api) => api.announce(line).await.map(|_| None),
             Err(e) => Err(e),
         })
     }

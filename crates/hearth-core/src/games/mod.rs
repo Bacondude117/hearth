@@ -4,6 +4,7 @@
 pub mod bedrock_players;
 pub mod factorio;
 pub mod java_players;
+pub mod left4dead2;
 pub mod mc_content;
 pub mod mc_loaders;
 pub mod mc_packs;
@@ -121,6 +122,9 @@ pub struct LaunchSpec {
     pub console_encoding: ConsoleEncoding,
     /// Hard cap on the server's memory (games without their own setting; Windows only).
     pub memory_limit_mb: Option<u32>,
+    /// A log file to show in the console, for servers whose console output can't be piped
+    /// (Source engine on Windows). Removed before start, then followed as it grows.
+    pub log_file: Option<PathBuf>,
 }
 
 /// Text encoding a server expects on its console input.
@@ -232,13 +236,14 @@ pub trait GameProvider: Send + Sync {
     }
 
     /// Handles a line typed in the console box when the game has no stdin console.
+    /// `Ok(None)`: sent as a broadcast; `Ok(Some(reply))`: a command and the server's reply.
     async fn console_input(
         &self,
         _ctx: &GameContext,
         _inst: &Instance,
         _server_dir: &Path,
         _line: &str,
-    ) -> Option<Result<()>> {
+    ) -> Option<Result<Option<String>>> {
         None
     }
 
@@ -304,6 +309,7 @@ impl Registry {
                 Arc::new(palworld::Palworld),
                 Arc::new(terraria::Terraria),
                 Arc::new(factorio::Factorio),
+                Arc::new(left4dead2::Left4Dead2),
             ],
         }
     }

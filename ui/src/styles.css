@@ -129,6 +129,7 @@ button { font: inherit; color: inherit; }
 .game-icon.palworld { background-image: url(/icons/palworld.svg); }
 .game-icon.terraria { background-image: url(/icons/terraria.svg); }
 .game-icon.factorio { background-image: url(/icons/factorio.svg); }
+.game-icon.left4dead2 { background-image: url(/icons/left4dead2.svg); }
 img.game-icon { background: none; }
 .icon-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .icon-text { flex: 1; min-width: 0; }

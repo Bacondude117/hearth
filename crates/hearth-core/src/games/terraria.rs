@@ -258,6 +258,7 @@ impl GameProvider for Terraria {
             env: vec![],
             console_encoding: console_encoding(),
             memory_limit_mb: None,
+            log_file: None,
         })
     }
 
@@ -405,6 +406,7 @@ fn launch_tml(ctx: &GameContext, dir: &Path) -> Result<LaunchSpec> {
         env: vec![("DOTNET_ROOT".into(), path(&ctx.dotnet.dir(&channel)))],
         console_encoding: console_encoding(),
         memory_limit_mb: None,
+        log_file: None,
     })
 }
 

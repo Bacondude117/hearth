@@ -1,6 +1,7 @@
 //! Running one server process: spawn, stream logs, send commands, stop gracefully.
 
 use std::collections::{BTreeSet, VecDeque};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -10,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, Command};
 use tokio::sync::{oneshot, watch};
 
@@ -161,6 +162,10 @@ impl ServerProcess {
             cmd.creation_flags(crate::system::CHILD_PROCESS_FLAGS);
         }
 
+        if let Some(log) = &spec.log_file {
+            // Old output would otherwise be replayed into the console.
+            let _ = std::fs::remove_file(log);
+        }
         console.push(LogStream::System, format!("Starting {}", spec.program.display()));
         let mut child = cmd.spawn().map_err(|e| {
             Error::InvalidInput(format!("Could not start the server ({}): {e}", spec.program.display()))
@@ -204,8 +209,16 @@ impl ServerProcess {
         });
         proc.emit_status();
 
-        let out_task = tokio::spawn(Self::pump(proc.clone(), stdout, LogStream::Stdout, Some(parser)));
+        let out_task = tokio::spawn(Self::pump(
+            proc.clone(),
+            stdout,
+            LogStream::Stdout,
+            Some(parser.clone()),
+        ));
         let err_task = tokio::spawn(Self::pump(proc.clone(), stderr, LogStream::Stderr, None));
+        if let Some(log) = spec.log_file.clone() {
+            tokio::spawn(Self::follow_log(proc.clone(), log, parser.clone()));
+        }
 
         let p = proc.clone();
         tokio::spawn(async move {
@@ -247,6 +260,47 @@ impl ServerProcess {
         });
 
         Ok(proc)
+    }
+
+    /// Shows a log file's new lines in the console until the server exits. Handles the file
+    /// appearing late, partial last lines, and the file being truncated.
+    async fn follow_log(self: Arc<Self>, path: PathBuf, parser: LineParser) {
+        use tokio::io::AsyncSeekExt;
+        let mut offset: u64 = 0;
+        let mut partial: Vec<u8> = vec![];
+        loop {
+            let exited = self.has_exited();
+            if let Ok(mut f) = tokio::fs::File::open(&path).await {
+                let len = f.metadata().await.map(|m| m.len()).unwrap_or(0);
+                if len < offset {
+                    offset = 0;
+                    partial.clear();
+                }
+                if len > offset && f.seek(std::io::SeekFrom::Start(offset)).await.is_ok() {
+                    let mut buf = vec![];
+                    if let Ok(n) = (&mut f).take(len - offset).read_to_end(&mut buf).await {
+                        offset += n as u64;
+                        partial.extend_from_slice(&buf);
+                        while let Some(i) = partial.iter().position(|&b| b == b'\n') {
+                            let raw: Vec<u8> = partial.drain(..=i).collect();
+                            let text = String::from_utf8_lossy(&raw);
+                            let line = strip_ansi(text.trim_end_matches(['\r', '\n']));
+                            if line.is_empty() {
+                                continue;
+                            }
+                            if let Some(ev) = parser(&line) {
+                                self.on_line_event(ev);
+                            }
+                            self.console.push(LogStream::Stdout, line);
+                        }
+                    }
+                }
+            }
+            if exited {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(400)).await;
+        }
     }
 
     async fn pump(self: Arc<Self>, stream: impl AsyncRead + Unpin, kind: LogStream, parser: Option<LineParser>) {

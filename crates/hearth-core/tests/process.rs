@@ -20,6 +20,7 @@ fn spawn(mode: &str) -> (Arc<ServerProcess>, Arc<Console>, Arc<VecSink>) {
         env: vec![],
         console_encoding: Default::default(),
         memory_limit_mb: None,
+        log_file: None,
     };
     let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
     let p = ServerProcess::spawn("t-0001".into(), &spec, parser, "stop", console.clone(), sink.clone()).unwrap();
@@ -117,6 +118,7 @@ async fn spawn_failure_is_a_readable_error() {
         env: vec![],
         console_encoding: Default::default(),
         memory_limit_mb: None,
+        log_file: None,
     };
     let parser: LineParser = Arc::new(|_: &str| None);
     let err = ServerProcess::spawn("t".into(), &spec, parser, "stop", console, sink)
@@ -132,4 +134,38 @@ async fn crash_report_counts_as_crash_even_with_exit_code_zero() {
     p.send_command("selfcrash").await.unwrap();
     p.wait().await;
     assert_eq!(p.status(), ServerStatus::Crashed { code: Some(0) });
+}
+
+/// Servers whose console can't be piped (Source on Windows) are shown through their log file:
+/// an old log is removed first, a partial last line waits for its newline, and log lines go
+/// through the game's parser.
+#[tokio::test]
+async fn follows_a_log_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("console.log");
+    std::fs::write(&log, "old line from last run\n").unwrap();
+    let sink = Arc::new(VecSink::default());
+    let console = Arc::new(Console::new("t-0002".into(), sink.clone()));
+    let script = format!(
+        "sleep 0.3; printf 'first\\n[Server thread/INFO]: Done (1.0s)! For help, type \"help\"\\npart' >> '{0}'; sleep 0.6; printf 'ial\\n' >> '{0}'; sleep 5",
+        log.display()
+    );
+    let spec = LaunchSpec {
+        program: "bash".into(),
+        args: vec!["-c".into(), script],
+        cwd: dir.path().to_path_buf(),
+        env: vec![],
+        console_encoding: Default::default(),
+        memory_limit_mb: None,
+        log_file: Some(log.clone()),
+    };
+    let parser: LineParser = Arc::new(|l: &str| MinecraftJava.parse_line(l));
+    let p = ServerProcess::spawn("t-0002".into(), &spec, parser, "", console.clone(), sink).unwrap();
+    let has = |c: &Console, t: &str| c.snapshot().iter().any(|l| l.text == t);
+    eventually(|| has(&console, "first")).await;
+    eventually(|| p.status() == ServerStatus::Running).await;
+    assert!(!has(&console, "part"), "partial line waits for its newline");
+    eventually(|| has(&console, "partial")).await;
+    assert!(!has(&console, "old line from last run"));
+    p.kill();
 }

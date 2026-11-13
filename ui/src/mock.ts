@@ -5,6 +5,7 @@ import type { ContentEntry, GameInfo, HearthEvent, LogLine, PackInfo, PlayitStat
 
 const PLUGINS = { label: "Plugins", folder: "plugins", extension: "jar", importLabel: null };
 const MODS = { label: "Mods", folder: "mods", extension: "jar", importLabel: null };
+const L4D2_ADDONS = { label: "Add-ons", folder: "left4dead2/addons", extension: "vpk", importLabel: "Copy my add-ons from Left 4 Dead 2" };
 const FACTORIO_MODS = { label: "Mods", folder: "mods", extension: "zip", importLabel: "Copy my enabled mods from Factorio" };
 const TML_MODS = { label: "Mods", folder: "Mods", extension: "tmod", importLabel: "Copy my enabled mods from tModLoader" };
 
@@ -96,6 +97,20 @@ const games: GameInfo[] = [
     playitTunnelType: null,
     commandHint: "Type a command or chat, e.g. /players or hello",
     setupNote: "Factorio's server is part of the game on Windows, so Hearth uses the copy installed on this PC, with its own map, saves and mods. Players need the same Factorio version (and expansion, if it's turned on).",
+  },
+  {
+    id: "left4dead2",
+    name: "Left 4 Dead 2",
+    description: "Co-op zombie survival for 4 (8 in Versus). Friends join from the developer console with connect and your address.",
+    flavors: [{ id: "dedicated", name: "Dedicated server", description: "Valve's dedicated server, downloaded through SteamCMD." }],
+    defaultPort: 27015,
+    protocol: "udp",
+    configurableMemory: false,
+    memoryLimit: true,
+    eula: null,
+    playitTunnelType: null,
+    commandHint: "Type a console command, e.g. status or changelevel c2m1_highway",
+    setupNote: "The first install downloads several GB through Steam. Players join from the developer console: turn on Options → Keyboard/Mouse → Allow Developer Console, press ~ and type connect with your address.",
   },
 ];
 
@@ -292,6 +307,8 @@ const handlers: Record<string, (a: any) => unknown> = {
       ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
       : game === "factorio"
         ? [{ id: "installed", label: "Installed (2.0.72)", stable: true }]
+      : game === "left4dead2"
+        ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
       : game === "terraria"
         ? [{ id: "latest", label: flavor === "tmodloader" ? "Latest (v2026.09.3.1)" : "Latest (1.4.5.8)", stable: true }]
       : ["fabric", "forge", "neoforge"].includes(flavor)
@@ -307,7 +324,7 @@ const handlers: Record<string, (a: any) => unknown> = {
             { id: "1.21.11", label: "1.21.11", stable: true },
           ]
         : ["26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10"].map((v) => ({ id: v, label: v, stable: true })),
-  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : game === "factorio" ? 34197 : 25567),
+  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : game === "factorio" ? 34197 : game === "left4dead2" ? 27016 : 25567),
   list_servers: () => servers,
   get_server: ({ id }) => find(id),
   create_server: ({ req }) => {
@@ -319,7 +336,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       installState: { state: "pending" }, createdAt: new Date().toISOString(), playitTunnelId: null,
       status: { state: "stopped" }, players: [], protocol: g.protocol, gameName: g.name,
       launch: null, pack: null, iconVersion: null, voice: null,
-      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : req.flavor === "tmodloader" ? TML_MODS : req.game === "factorio" ? FACTORIO_MODS : null,
+      content: req.flavor === "paper" ? PLUGINS : ["fabric", "forge", "neoforge"].includes(req.flavor) ? MODS : req.flavor === "tmodloader" ? TML_MODS : req.game === "factorio" ? FACTORIO_MODS : req.game === "left4dead2" ? L4D2_ADDONS : null,
     };
     servers.push(s);
     void install(s);
@@ -370,14 +387,14 @@ const handlers: Record<string, (a: any) => unknown> = {
     const list = (playerStore.get(id) ?? []).map((p) => ({ ...p, online: s.players.includes(p.name) }));
     list.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     return {
-      caps: s.game === "palworld" || s.game === "terraria"
+      caps: s.game === "palworld" || s.game === "terraria" || s.game === "left4dead2"
         ? { roles: [], canBan: true, banReason: false, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
         : bedrock
           ? { roles: ["visitor", "member", "operator"], canBan: false, banReason: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
           : s.game === "factorio"
             ? { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: [], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false }
             : { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
-      whitelistEnabled: !bedrock && s.game !== "palworld" && s.game !== "terraria",
+      whitelistEnabled: !bedrock && !["palworld", "terraria", "left4dead2"].includes(s.game),
       running: s.status.state === "running",
       players: list,
     };

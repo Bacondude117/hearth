@@ -55,6 +55,32 @@ const PALWORLD_FIELDS: Field[] = [
   { key: "AdminPassword", label: "Admin password", kind: "text", hint: "Hearth uses this to control the server. Players can type it in chat with /AdminPassword." },
 ];
 
+const L4D2_CAMPAIGNS: Record<string, string> = {
+  c1m1_hotel: "Dead Center",
+  c2m1_highway: "Dark Carnival",
+  c3m1_plankcountry: "Swamp Fever",
+  c4m1_milltown_a: "Hard Rain",
+  c5m1_waterfront: "The Parish",
+  c6m1_riverbank: "The Passing",
+  c7m1_docks: "The Sacrifice",
+  c8m1_apartment: "No Mercy",
+  c9m1_alleys: "Crash Course",
+  c10m1_caves: "Death Toll",
+  c11m1_greenhouse: "Dead Air",
+  c12m1_hilltop: "Blood Harvest",
+  c13m1_alpinecreek: "Cold Stream",
+  c14m1_junkyard: "The Last Stand",
+};
+
+const L4D2_FIELDS: Field[] = [
+  { key: "hostname", label: "Server name", kind: "text" },
+  { key: "sv_password", label: "Join password", kind: "text", hint: "Leave empty so anyone with the address can join." },
+  { key: "port", label: "Port", kind: "number", min: 1024, max: 65535, port: true },
+  { key: "gamemode", label: "Game mode", kind: "select", options: ["coop", "realism", "versus", "survival", "scavenge"], labels: { coop: "Campaign (co-op)", realism: "Realism", versus: "Versus", survival: "Survival", scavenge: "Scavenge" } },
+  { key: "map", label: "Starting campaign", kind: "select", options: Object.keys(L4D2_CAMPAIGNS), labels: L4D2_CAMPAIGNS, hint: "Custom campaigns: start the server, then type map <name> in the console." },
+  { key: "z_difficulty", label: "Difficulty", kind: "select", options: ["Easy", "Normal", "Hard", "Impossible"], labels: { Hard: "Advanced", Impossible: "Expert" } },
+];
+
 const FACTORIO_FIELDS: Field[] = [
   { key: "name", label: "Server name", kind: "text" },
   { key: "description", label: "Description", kind: "text" },
@@ -84,6 +110,7 @@ const TERRARIA_FIELDS: Field[] = [
 const FIELDS: Record<string, Field[]> = {
   terraria: TERRARIA_FIELDS,
   factorio: FACTORIO_FIELDS,
+  left4dead2: L4D2_FIELDS,
   "minecraft-java": JAVA_FIELDS,
   "minecraft-bedrock": BEDROCK_FIELDS,
   palworld: PALWORLD_FIELDS,

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0] - 2026-11-13
+
+### Added
+- **Left 4 Dead 2** servers (Valve's dedicated server, downloaded through SteamCMD).
+  - Settings: server name, join password, game mode (campaign, realism, versus, survival, scavenge), starting campaign and difficulty. Players can join with `connect` (lobby-only joining is turned off).
+  - Console: Hearth shows the server's log and sends commands over the remote console (RCON), with replies shown in the console. Hearth sets up a random RCON password; it never leaves your PC.
+  - Shows who's playing; kick and ban (by Steam ID), unban from the Players tab.
+  - **Add-ons** tab: **Copy my add-ons from Left 4 Dead 2** copies the Workshop add-ons and custom campaigns enabled in your game, or add `.vpk` files.
+
+### Fixed
+- An empty Factorio **Mods** tab told you to add `.jar` files.
+
 ## [0.10.0] - 2026-11-12
 
 ### Added

@@ -9,7 +9,7 @@ import { VoiceChatCard } from "./VoiceChatCard";
 export function ContentTab({ server, playit }: { server: Server; playit: PlayitStatus | null }) {
   const toast = useToast();
   const folder = server.content!;
-  const noun = folder.label === "Plugins" ? "plugin" : "mod";
+  const noun = folder.label === "Plugins" ? "plugin" : folder.label === "Add-ons" ? "add-on" : "mod";
   const [items, setItems] = useState<ContentEntry[] | null>(null);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
@@ -118,7 +118,16 @@ export function ContentTab({ server, playit }: { server: Server; playit: PlayitS
           <p>
             <strong>No {noun}s yet.</strong>
           </p>
-          {folder.extension === "tmod" ? (
+          {folder.extension === "vpk" ? (
+            <p className="muted">
+              Use <strong>{folder.importLabel}</strong> to bring over the Workshop add-ons and custom campaigns enabled in your game, or add .vpk files.
+              Players need the same add-ons to join.
+            </p>
+          ) : folder.extension === "zip" ? (
+            <p className="muted">
+              Use <strong>{folder.importLabel}</strong> to match the mods (and Space Age settings) in your game, or add mod .zip files.
+            </p>
+          ) : folder.extension === "tmod" ? (
             <p className="muted">
               Enable mods in tModLoader on this PC, then use <strong>{folder.importLabel}</strong>, or add .tmod files directly.
               Players who join without them get the mods from the server automatically.

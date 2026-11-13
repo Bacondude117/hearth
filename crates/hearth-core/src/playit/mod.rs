@@ -284,6 +284,7 @@ impl Playit {
             env: vec![],
             console_encoding: Default::default(),
             memory_limit_mb: None,
+            log_file: None,
         };
         // The agent is "ready" as soon as it runs; there is no banner to wait for.
         let parser: crate::process::LineParser = Arc::new(|_: &str| None::<LineEvent>);
