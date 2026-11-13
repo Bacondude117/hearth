@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.2] - 2026-11-13
+
+### Fixed
+- Left 4 Dead 2 servers stayed on **Starting** (and the console, player list and Stop couldn't reach them): srcds listened only on the LAN address it picked, so Hearth's remote console on 127.0.0.1 was refused. It now listens on every address (`+ip 0.0.0.0`), Hearth also tries the LAN address, and the log marks the server Online and tracks joins as a backup.
+
 ## [0.11.1] - 2026-11-13
 
 ### Fixed

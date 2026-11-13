@@ -270,6 +270,25 @@ pub(crate) fn parse_status(text: &str) -> Vec<RemotePlayer> {
         .collect()
 }
 
+/// `Connection to Steam servers successful.` (ready), `Client "Bacon" connected (1.2.3.4:27005).`
+/// and `Dropped Bacon from server (Disconnect by user.)`.
+pub(crate) fn parse_l4d2_line(line: &str) -> Option<LineEvent> {
+    let line = line.trim();
+    if line.starts_with("Connection to Steam servers successful") {
+        return Some(LineEvent::Ready);
+    }
+    if let Some(rest) = line.strip_prefix("Client \"") {
+        let (name, tail) = rest.rsplit_once("\" connected")?;
+        return (!name.is_empty() && tail.trim_start().starts_with('('))
+            .then(|| LineEvent::PlayerJoined(name.to_owned()));
+    }
+    if let Some(rest) = line.strip_prefix("Dropped ") {
+        let (name, _) = rest.rsplit_once(" from server")?;
+        return (!name.is_empty()).then(|| LineEvent::PlayerLeft(name.to_owned()));
+    }
+    None
+}
+
 // ---- add-ons -------------------------------------------------------------------------------------
 
 /// Enabled add-ons from the game's `addonlist.txt` (`"workshop\123.vpk"  "1"`).
@@ -401,6 +420,10 @@ impl GameProvider for Left4Dead2 {
                 inst.port.to_string(),
                 "-usercon".into(),
                 "-condebug".into(),
+                // Listen on every address (srcds otherwise binds only the LAN IP it picks,
+                // which shuts out RCON on 127.0.0.1).
+                "+ip".into(),
+                "0.0.0.0".into(),
                 // `map <name> <mode>`: mp_gamemode can't be set from the command line.
                 "+map".into(),
                 map,
@@ -415,9 +438,9 @@ impl GameProvider for Left4Dead2 {
         })
     }
 
-    fn parse_line(&self, _line: &str) -> Option<LineEvent> {
-        // Readiness and players come from RCON `status` (see `poll`).
-        None
+    fn parse_line(&self, line: &str) -> Option<LineEvent> {
+        // RCON `status` (see `poll`) is the main source; the log covers for it.
+        parse_l4d2_line(line)
     }
 
     fn stop_command(&self) -> &'static str {
@@ -745,6 +768,23 @@ mod tests {
             ]
         );
         assert!(parse_status("players : 0 humans\n# userid name uniqueid\n#end").is_empty());
+    }
+
+    #[test]
+    fn parses_log_lines() {
+        use LineEvent::*;
+        let p = parse_l4d2_line;
+        assert_eq!(p("Connection to Steam servers successful."), Some(Ready));
+        assert_eq!(
+            p("Client \"BaconDude\" connected (127.234.172.136:60727)."),
+            Some(PlayerJoined("BaconDude".into()))
+        );
+        assert_eq!(
+            p("Dropped BaconDude from server (Disconnect by user.)"),
+            Some(PlayerLeft("BaconDude".into()))
+        );
+        assert_eq!(p("Server is hibernating"), None);
+        assert_eq!(p("   VAC secure mode is activated."), None);
     }
 
     #[test]

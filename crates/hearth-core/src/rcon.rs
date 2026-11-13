@@ -61,12 +61,24 @@ fn unreachable_err(e: impl std::fmt::Display) -> Error {
 }
 
 impl Rcon {
-    /// Connects to `127.0.0.1:port` and logs in.
+    /// Connects to the server on this PC and logs in. Source servers may listen only on the
+    /// LAN address they picked, so that's tried when `127.0.0.1` refuses.
     pub async fn connect(port: u16, password: &str) -> Result<Self> {
-        let stream = tokio::time::timeout(TIMEOUT, TcpStream::connect(("127.0.0.1", port)))
-            .await
-            .map_err(|_| unreachable_err("timed out"))?
-            .map_err(unreachable_err)?;
+        let mut hosts = vec![std::net::IpAddr::from([127, 0, 0, 1])];
+        hosts.extend(lan_ip());
+        let mut last = None;
+        let mut stream = None;
+        for host in hosts {
+            match tokio::time::timeout(Duration::from_secs(2), TcpStream::connect((host, port))).await {
+                Ok(Ok(s)) => {
+                    stream = Some(s);
+                    break;
+                }
+                Ok(Err(e)) => last = Some(e.to_string()),
+                Err(_) => last = Some("timed out".into()),
+            }
+        }
+        let stream = stream.ok_or_else(|| unreachable_err(last.unwrap_or_default()))?;
         let _ = stream.set_nodelay(true);
         let mut r = Self { stream, next_id: 1 };
         let id = r.send(AUTH, password).await?;
@@ -127,6 +139,15 @@ impl Rcon {
             }
         }
     }
+}
+
+/// This PC's address on its local network (the route to the internet), without sending
+/// anything: connecting a UDP socket only picks the outgoing interface.
+pub fn lan_ip() -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("192.0.2.1:9").ok()?;
+    let ip = s.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
 }
 
 /// Connects, runs one command, and returns the reply.
