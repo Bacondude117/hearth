@@ -53,10 +53,12 @@ mod imp {
     use std::path::Path;
 
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Console::{AttachConsole, FreeConsole, GetConsoleWindow};
     use windows_sys::Win32::System::Threading::{
         CreateProcessW, GetExitCodeProcess, TerminateProcess, WaitForSingleObject, CREATE_UNICODE_ENVIRONMENT,
-        INFINITE, PROCESS_INFORMATION, STARTUPINFOW,
+        INFINITE, PROCESS_INFORMATION, STARTF_USESHOWWINDOW, STARTUPINFOW,
     };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{IsWindowVisible, ShowWindow, SW_HIDE};
 
     fn wide(s: &std::ffi::OsStr) -> Vec<u16> {
         s.encode_wide().chain(Some(0)).collect()
@@ -91,6 +93,43 @@ mod imp {
         block
     }
 
+    /// Only one console can be attached to Hearth at a time.
+    static CONSOLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Hides the console window the server opens for itself, if Windows shows it anyway. Checks
+    /// for a minute (the window appears once the server has loaded), by briefly attaching to
+    /// the server's console to find its window.
+    fn hide_console_window(pid: u32) {
+        std::thread::spawn(move || {
+            let mut hidden_checks = 0;
+            for _ in 0..120 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let _g = CONSOLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+                // SAFETY: Hearth has no console of its own; it attaches, reads the window handle
+                // and detaches straight away.
+                let found = unsafe {
+                    if AttachConsole(pid) == 0 {
+                        // Not created yet, or the server has exited.
+                        continue;
+                    }
+                    let hwnd = GetConsoleWindow();
+                    let ok = !hwnd.is_null();
+                    if ok && IsWindowVisible(hwnd) != 0 {
+                        ShowWindow(hwnd, SW_HIDE);
+                    }
+                    FreeConsole();
+                    ok
+                };
+                if found {
+                    hidden_checks += 1;
+                    if hidden_checks >= 10 {
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
     impl ConsoleChild {
         pub fn spawn(program: &Path, args: &[String], cwd: &Path, env: &[(String, String)]) -> std::io::Result<Self> {
             let app = wide(program.as_os_str());
@@ -103,6 +142,10 @@ mod imp {
             // SAFETY: zeroed STARTUPINFOW/PROCESS_INFORMATION are valid initial values.
             let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
             si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+            // srcds is a GUI program that opens its console itself (so CREATE_NO_WINDOW doesn't
+            // apply); its first window takes this show state.
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_HIDE as u16;
             let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
             // SAFETY: every pointer is valid for the call; buffers are NUL-terminated.
             let ok = unsafe {
@@ -124,6 +167,7 @@ mod imp {
             }
             // SAFETY: the thread handle isn't needed.
             unsafe { CloseHandle(pi.hThread) };
+            hide_console_window(pi.dwProcessId);
             Ok(Self {
                 handle: pi.hProcess as usize,
             })

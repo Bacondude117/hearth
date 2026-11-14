@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.3] - 2026-11-14
+
+### Fixed
+- Left 4 Dead 2 opened a second console window next to Hearth (showing Hearth's background `status` checks). srcds opens that window itself, so Hearth now starts it hidden and hides the window if it appears anyway. Use Hearth's Console tab instead; closing that window would have stopped the server.
+
 ## [0.11.2] - 2026-11-13
 
 ### Fixed
