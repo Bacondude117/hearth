@@ -99,6 +99,20 @@ const games: GameInfo[] = [
     setupNote: "Factorio's server is part of the game on Windows, so Hearth uses the copy installed on this PC, with its own map, saves and mods. Players need the same Factorio version (and expansion, if it's turned on).",
   },
   {
+    id: "sevendays",
+    name: "7 Days to Die",
+    description: "Survive the zombie hordes together. Friends join from Join a Game → Connect to IP.",
+    flavors: [{ id: "dedicated", name: "Dedicated server", description: "The Fun Pimps' dedicated server, downloaded through SteamCMD." }],
+    defaultPort: 26900,
+    protocol: "udp",
+    configurableMemory: false,
+    memoryLimit: true,
+    eula: null,
+    playitTunnelType: null,
+    commandHint: 'Type a console command, e.g. say "hello", lp or saveworld',
+    setupNote: "The first install downloads over 10 GB through Steam. The first start also generates the world, which can take several minutes; the server shows Online when it's ready. 7 Days to Die needs at least 8 GB of memory.",
+  },
+  {
     id: "left4dead2",
     name: "Left 4 Dead 2",
     description: "Co-op zombie survival for 4 (8 in Versus). Friends join from the developer console with connect and your address.",
@@ -307,7 +321,7 @@ const handlers: Record<string, (a: any) => unknown> = {
       ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
       : game === "factorio"
         ? [{ id: "installed", label: "Installed (2.0.72)", stable: true }]
-      : game === "left4dead2"
+      : game === "left4dead2" || game === "sevendays"
         ? [{ id: "latest", label: "Latest (Steam)", stable: true }]
       : game === "terraria"
         ? [{ id: "latest", label: flavor === "tmodloader" ? "Latest (v2026.09.3.1)" : "Latest (1.4.5.8)", stable: true }]
@@ -324,7 +338,7 @@ const handlers: Record<string, (a: any) => unknown> = {
             { id: "1.21.11", label: "1.21.11", stable: true },
           ]
         : ["26.3", "26.2", "26.1.2", "26.1", "1.21.11", "1.21.10"].map((v) => ({ id: v, label: v, stable: true })),
-  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : game === "factorio" ? 34197 : game === "left4dead2" ? 27016 : 25567),
+  suggest_port: ({ game }) => (game === "minecraft-bedrock" ? 19134 : game === "palworld" ? 8213 : game === "terraria" ? 7778 : game === "factorio" ? 34197 : game === "left4dead2" ? 27016 : game === "sevendays" ? 26900 : 25567),
   list_servers: () => servers,
   get_server: ({ id }) => find(id),
   create_server: ({ req }) => {
@@ -391,10 +405,10 @@ const handlers: Record<string, (a: any) => unknown> = {
         ? { roles: [], canBan: true, banReason: false, gameModes: [], hasWhitelist: false, whitelistLabel: "", roleNeedsId: false }
         : bedrock
           ? { roles: ["visitor", "member", "operator"], canBan: false, banReason: false, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Allow list", roleNeedsId: true }
-          : s.game === "factorio"
+          : s.game === "factorio" || s.game === "sevendays"
             ? { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: [], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false }
             : { roles: ["player", "operator"], canBan: true, banReason: true, gameModes: ["survival", "creative", "adventure", "spectator"], hasWhitelist: true, whitelistLabel: "Whitelist", roleNeedsId: false },
-      whitelistEnabled: !bedrock && !["palworld", "terraria", "left4dead2"].includes(s.game),
+      whitelistEnabled: !bedrock && !["palworld", "terraria", "left4dead2", "sevendays"].includes(s.game),
       running: s.status.state === "running",
       players: list,
     };

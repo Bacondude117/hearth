@@ -55,6 +55,24 @@ const PALWORLD_FIELDS: Field[] = [
   { key: "AdminPassword", label: "Admin password", kind: "text", hint: "Hearth uses this to control the server. Players can type it in chat with /AdminPassword." },
 ];
 
+const SEVENDAYS_FIELDS: Field[] = [
+  { key: "ServerName", label: "Server name", kind: "text" },
+  { key: "ServerDescription", label: "Description", kind: "text" },
+  { key: "ServerPassword", label: "Join password", kind: "text", hint: "Leave empty so anyone with the address can join." },
+  { key: "ServerPort", label: "Port", kind: "number", min: 1024, max: 64000, port: true },
+  { key: "ServerMaxPlayerCount", label: "Max players", kind: "number", min: 1, max: 64 },
+  { key: "ServerVisibility", label: "Server list", kind: "select", options: ["0", "1", "2"], labels: { "0": "Not listed", "1": "Friends only", "2": "Public" } },
+  { key: "GameWorld", label: "World", kind: "select", options: ["Navezgane", "RWG"], labels: { Navezgane: "Navezgane (hand-made map)", RWG: "Random world" }, hint: "Changing the world or its name starts a new save." },
+  { key: "WorldGenSeed", label: "Random world seed", kind: "text", hint: "Used when World is Random world." },
+  { key: "WorldGenSize", label: "Random world size", kind: "select", options: ["6144", "8192", "10240"], labels: { "6144": "Small (6 km)", "8192": "Medium (8 km)", "10240": "Large (10 km)" } },
+  { key: "GameName", label: "Save name", kind: "text" },
+  { key: "GameDifficulty", label: "Difficulty", kind: "select", options: ["0", "1", "2", "3", "4", "5"], labels: { "0": "Scavenger", "1": "Adventurer", "2": "Nomad", "3": "Warrior", "4": "Survivalist", "5": "Insane" } },
+  { key: "DayNightLength", label: "Day length (real minutes)", kind: "number", min: 10, max: 240 },
+  { key: "BloodMoonFrequency", label: "Blood moon every (days)", kind: "number", min: 0, max: 99, hint: "0 turns blood moons off." },
+  { key: "PlayerKillingMode", label: "Player killing", kind: "select", options: ["0", "1", "2", "3"], labels: { "0": "Off", "1": "Allies only", "2": "Strangers only", "3": "Everyone" } },
+  { key: "EACEnabled", label: "Easy Anti-Cheat", kind: "bool", hint: "Players with mods that change the game may need this off." },
+];
+
 const L4D2_CAMPAIGNS: Record<string, string> = {
   c1m1_hotel: "Dead Center",
   c2m1_highway: "Dark Carnival",
@@ -111,6 +129,7 @@ const FIELDS: Record<string, Field[]> = {
   terraria: TERRARIA_FIELDS,
   factorio: FACTORIO_FIELDS,
   left4dead2: L4D2_FIELDS,
+  sevendays: SEVENDAYS_FIELDS,
   "minecraft-java": JAVA_FIELDS,
   "minecraft-bedrock": BEDROCK_FIELDS,
   palworld: PALWORLD_FIELDS,

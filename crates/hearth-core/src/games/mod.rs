@@ -14,6 +14,7 @@ pub mod minecraft_java;
 pub mod palworld;
 pub mod palworld_api;
 pub mod palworld_settings;
+pub mod sevendays;
 pub mod terraria;
 pub mod tmodloader;
 
@@ -314,6 +315,7 @@ impl Registry {
                 Arc::new(terraria::Terraria),
                 Arc::new(factorio::Factorio),
                 Arc::new(left4dead2::Left4Dead2),
+                Arc::new(sevendays::SevenDays),
             ],
         }
     }

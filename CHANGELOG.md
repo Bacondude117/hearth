@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.12.0] - 2026-11-14
+
+### Added
+- **7 Days to Die** servers (the dedicated server, downloaded through SteamCMD).
+  - Saves stay in the server's folder, apart from your own game. No extra window opens.
+  - Settings: name, password, port, max players, server list visibility, world (Navezgane or random, with seed and size), difficulty, day length, blood moon frequency, player killing and Easy Anti-Cheat.
+  - Shows **Online** once the world has loaded (the first start generates it, which takes a few minutes).
+  - Console and players through the server's admin console (Telnet, with a random password that never leaves your PC): see who's playing, make admins, kick and ban with a reason they see, unban. **Stop** saves the world first.
+  - Share online shows the IP and port in separate boxes, as the game asks for them.
+
 ## [0.11.3] - 2026-11-14
 
 ### Fixed

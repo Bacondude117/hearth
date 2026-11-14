@@ -10,6 +10,7 @@ const JOIN_HELP: Record<string, string> = {
   palworld: "In Palworld: Join Multiplayer Game, paste this address (including the :port) into the box at the bottom, and Connect.",
   terraria: "In Terraria: Multiplayer → Join via IP, pick a character, then fill in both boxes below.",
   factorio: "In Factorio: Multiplayer → Connect to address, and paste this address (including the :port).",
+  sevendays: "In 7 Days to Die: Join a Game → Connect to IP, then fill in both boxes below.",
   left4dead2: "In Left 4 Dead 2: turn on Options → Keyboard/Mouse → Allow Developer Console, press ~, and type connect followed by this address (including the :port).",
 };
 
@@ -17,6 +18,7 @@ const JOIN_HELP: Record<string, string> = {
 const SPLIT_FIELDS: Record<string, [host: string, port: string]> = {
   "minecraft-bedrock": ["Server Address", "Port"],
   terraria: ["Enter Server IP Address", "Enter Server Port"],
+  sevendays: ["IP", "Port"],
 };
 
 /** `host:port` → parts. An address without a port uses the game's default. */
